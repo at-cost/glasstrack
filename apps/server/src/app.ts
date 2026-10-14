@@ -6,6 +6,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { sql } from "kysely";
 import { ZodError } from "zod";
 import { authRoutes } from "./auth/routes";
+import { adminRoutes, publicFinanceRoutes } from "./finances/routes";
 import { billingRoutes } from "./billing/routes";
 import { stripeWebhookRoutes } from "./billing/webhook";
 import { sessionMiddleware } from "./auth/session";
@@ -91,6 +92,8 @@ export function createApp(deps: Deps) {
 
   api.route("/auth", authRoutes);
   api.route("/stripe", stripeWebhookRoutes);
+  api.route("/public", publicFinanceRoutes);
+  api.route("/admin", adminRoutes);
   api.route("/files", fileRoutes);
   api.route("/", workspaceRootRoutes);
   api.route("/w/:slug", realtimeRoutes);

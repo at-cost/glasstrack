@@ -7,6 +7,7 @@ import type { Tx, WorkspaceCtx } from "./db/tenant";
 import type { Mailer } from "./email";
 import type { Jobs } from "./jobs/types";
 import { forbidden, unauthorized } from "./lib/errors";
+import type { UsageMeter } from "./lib/meter";
 import type { RateLimiter } from "./lib/rateLimit";
 import type { RealtimeHub } from "./realtime/hub";
 import type { Storage } from "./storage";
@@ -19,6 +20,7 @@ export interface Deps {
   hub: RealtimeHub;
   jobs: Jobs;
   payments: PaymentGateway;
+  meter: UsageMeter;
   limits: { auth: RateLimiter; api: RateLimiter };
 }
 

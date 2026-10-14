@@ -254,7 +254,7 @@ export const workspaceRoutes = new Hono<AppEnv>()
         [`${user.name} invited you to the ${ws.name} workspace.`, `The invite expires in ${INVITE_DAYS} days.`],
         { label: "Accept invite", url },
       );
-      await deps.mailer.send({ to: body.email, subject: `${user.name} invited you to ${ws.name}`, text, html });
+      await deps.mailer.send({ to: body.email, subject: `${user.name} invited you to ${ws.name}`, text, html, workspaceId: ws.id });
     }
     const invite: Invite = {
       id,

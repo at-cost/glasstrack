@@ -4,8 +4,9 @@ import { createApp } from "../src/app";
 import { loadConfig } from "../src/config";
 import type { Deps } from "../src/context";
 import { createDatabases } from "../src/db";
-import { createTestMailer } from "../src/email";
+import { createTestMailer, meteredMailer } from "../src/email";
 import { createInlineJobs } from "../src/jobs";
+import { UsageMeter } from "../src/lib/meter";
 import { RateLimiter } from "../src/lib/rateLimit";
 import { RealtimeHub } from "../src/realtime/hub";
 import { createStorage } from "../src/storage";
@@ -22,10 +23,12 @@ export async function createHarness(overrides: Record<string, string> = {}) {
   const jobs = createInlineJobs(() => deps);
   const hub = new RealtimeHub(dbs.systemPool);
   const payments = fakeStripe();
+  const meter = new UsageMeter(config.BILLING_ENABLED);
   deps = {
     config,
     dbs,
-    mailer,
+    mailer: meteredMailer(mailer, (ws) => meter.countEmail(ws)),
+    meter,
     storage: createStorage(config),
     hub,
     jobs,

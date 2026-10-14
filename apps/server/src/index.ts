@@ -4,7 +4,8 @@ import { disabledGateway, stripeGateway } from "./billing/gateway";
 import { loadConfig } from "./config";
 import type { Deps } from "./context";
 import { createDatabases, ensureRoles, migrateToLatest } from "./db";
-import { createMailer } from "./email";
+import { createMailer, meteredMailer } from "./email";
+import { UsageMeter } from "./lib/meter";
 import { createBossJobs } from "./jobs";
 import { logger } from "./lib/logger";
 import { RateLimiter } from "./lib/rateLimit";
@@ -21,10 +22,12 @@ if (config.MIGRATE_ON_BOOT) {
 
 const jobs = await createBossJobs(config);
 const hub = new RealtimeHub(dbs.systemPool);
+const meter = new UsageMeter(config.BILLING_ENABLED);
 const deps: Deps = {
   config,
   dbs,
-  mailer: createMailer(config),
+  mailer: meteredMailer(createMailer(config), (ws) => meter.countEmail(ws)),
+  meter,
   storage: createStorage(config),
   hub,
   jobs,
@@ -38,6 +41,7 @@ if (config.BILLING_ENABLED) {
   await currentPriceMicro(deps);
 }
 if (config.WORKER_MODE !== "off") await jobs.startWorkers(deps);
+meter.start(dbs.system);
 
 let server: ReturnType<typeof serve> | null = null;
 if (config.WORKER_MODE !== "only") {
@@ -51,6 +55,7 @@ async function shutdown(signal: string) {
   logger.info({ signal }, "shutting down");
   server?.close();
   await hub.stop();
+  await meter.stop(dbs.system);
   await jobs.stop();
   await dbs.close();
   process.exit(0);

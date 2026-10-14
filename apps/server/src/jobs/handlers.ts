@@ -176,7 +176,7 @@ export async function sendDigests(deps: Deps) {
       label: "Open inbox",
       url: `${base}/${g.slug}/inbox`,
     });
-    await deps.mailer.send({ to: g.email, subject: `${items.length} new update${items.length === 1 ? "" : "s"} in ${g.wsName}`, text, html });
+    await deps.mailer.send({ to: g.email, subject: `${items.length} new update${items.length === 1 ? "" : "s"} in ${g.wsName}`, text, html, workspaceId: g.workspaceId });
     await sys.updateTable("notifications").set({ emailedAt: new Date() }).where("id", "in", items.map((i) => i.id)).execute();
     await sys.insertInto("notificationSettings")
       .values({ workspaceId: g.workspaceId, userId: g.userId, events: "{}", lastDigestAt: new Date() })
@@ -218,6 +218,11 @@ export const handlers: Handlers = {
   "billing.fees": async (deps) => {
     const { backfillFees } = await import("../billing/service");
     await backfillFees(deps);
+  },
+  "finances.daily": async (deps) => {
+    await deps.meter.flush(deps.dbs.system);
+    const { runDailyFinances } = await import("../finances/service");
+    await runDailyFinances(deps);
   },
   "backup.run": async (deps) => {
     const { runBackup } = await import("./backup");

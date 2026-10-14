@@ -1,6 +1,7 @@
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runDailyBilling } from "../src/billing/service";
+import { runDailyFinances } from "../src/finances/service";
 import { type Client, createHarness, type Harness, setupWorkspace } from "./harness";
 
 /**
@@ -63,6 +64,7 @@ beforeAll(async () => {
   });
   await h.app.request("/api/v1/stripe/webhook", { method: "POST", headers: { "stripe-signature": ev.signature, "content-type": "application/json" }, body: ev.body });
   await runDailyBilling(h.deps);
+  await runDailyFinances(h.deps, new Date(Date.now() + 86_400_000));
 });
 
 afterAll(async () => {
@@ -179,8 +181,8 @@ describe("database-level isolation as glasstrack_app", () => {
       const r = await sql<{ n: string }>`SELECT count(*) AS n FROM ${sql.table(table)} WHERE workspace_id = ${bWorkspaceId}`.execute(h.deps.dbs.owner);
       if (Number(r.rows[0]!.n) === 0) empty.push(table);
     }
-    // Key aliases only exist after a team rename; metering tables fill in the M3 tests.
-    expect(empty).toEqual(["team_key_aliases", "usage_daily", "workspace_cost_daily"]);
+    // Key aliases only exist after a team rename.
+    expect(empty).toEqual(["team_key_aliases"]);
   });
 
   it("inserting a row tagged with B's workspace_id is rejected", async () => {

@@ -12,6 +12,7 @@ import { createDatabases, ensureRoles, migrateToLatest } from "../db";
 import { createMailer } from "../email";
 import { createInlineJobs } from "../jobs";
 import { newToken, sha256, uuid7 } from "../lib/ids";
+import { UsageMeter } from "../lib/meter";
 import { RateLimiter } from "../lib/rateLimit";
 import { RealtimeHub } from "../realtime/hub";
 import { createStorage } from "../storage";
@@ -27,6 +28,7 @@ deps = {
   config, dbs, mailer: createMailer(config), storage: createStorage(config), hub: new RealtimeHub(dbs.systemPool),
   jobs: createInlineJobs(() => deps),
   payments: disabledGateway(),
+  meter: new UsageMeter(false),
   limits: { auth: new RateLimiter(1e6, 60_000), api: new RateLimiter(1e6, 60_000) },
 };
 const app = createApp(deps);

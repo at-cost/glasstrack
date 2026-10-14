@@ -31,6 +31,7 @@ export const workspaceTx: MiddlewareHandler<AppEnv> = async (c, next) => {
     }
     c.set("trx", trx);
     c.set("ws", ws);
+    deps.meter.countApi(ws.id);
     // Activity for metering, written at most once an hour per member.
     await sql`UPDATE workspace_members SET last_active_at = now()
       WHERE workspace_id = ${ws.id} AND user_id = ${user.id} AND last_active_at < now() - interval '1 hour'`.execute(trx);

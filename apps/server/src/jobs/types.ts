@@ -7,6 +7,7 @@ export interface JobPayloads {
   "billing.daily": Record<string, never>;
   "billing.autotopup": { workspaceId: string };
   "billing.fees": Record<string, never>;
+  "finances.daily": Record<string, never>;
 }
 export type JobName = keyof JobPayloads;
 

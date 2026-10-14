@@ -47,6 +47,16 @@ export function createMailer(config: Config): Mailer {
   };
 }
 
+/** Counts emails per workspace for cost allocation. */
+export function meteredMailer(inner: Mailer, count: (workspaceId: string | undefined) => void): Mailer {
+  return {
+    async send(msg) {
+      await inner.send(msg);
+      count(msg.workspaceId);
+    },
+  };
+}
+
 /** In-memory mailer for tests. */
 export function createTestMailer(): Mailer & { outbox: EmailMessage[]; last(to: string): EmailMessage | undefined } {
   const outbox: EmailMessage[] = [];
