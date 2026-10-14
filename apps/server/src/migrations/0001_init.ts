@@ -385,7 +385,7 @@ CREATE POLICY visible ON users FOR SELECT TO tracker_app USING (
 CREATE POLICY self_update ON users FOR UPDATE TO tracker_app USING (id = app.uid()) WITH CHECK (id = app.uid());
 
 -- Grants
-GRANT USAGE ON SCHEMA app TO tracker_app, tracker_system;
+GRANT USAGE ON SCHEMA public, app TO tracker_app, tracker_system;
 GRANT CREATE ON SCHEMA app TO tracker_system;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO tracker_system;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO tracker_app, tracker_system;

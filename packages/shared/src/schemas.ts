@@ -117,7 +117,7 @@ export const updateSavedViewSchema = savedViewSchema.partial();
 
 export const notificationSettingsSchema = z.object({
   digest: z.enum(DIGEST_FREQUENCIES),
-  events: z.record(z.enum(NOTIFICATION_KINDS), z.boolean()),
+  events: z.partialRecord(z.enum(NOTIFICATION_KINDS), z.boolean()),
 });
 
 export const attachmentRequestSchema = z.object({
