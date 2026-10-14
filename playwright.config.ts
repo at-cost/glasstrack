@@ -14,11 +14,10 @@ export default defineConfig({
   workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
-  globalSetup: "./e2e/global-setup.ts",
   use: { baseURL: E2E.url, trace: "retain-on-failure", screenshot: "only-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "node --enable-source-maps apps/server/dist/index.js",
+    command: "node e2e/prepare.mjs && node --enable-source-maps apps/server/dist/index.js",
     url: `${E2E.url}/ready`,
     reuseExistingServer: false,
     timeout: 60_000,

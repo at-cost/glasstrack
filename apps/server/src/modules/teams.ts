@@ -137,6 +137,7 @@ export const teamRoutes = new Hono<AppEnv>()
   .get("/states", async (c) => {
     const visible = await visibleTeamIds(c);
     let q = c.get("trx").selectFrom("workflowStates").select(["id", "teamId", "name", "category", "color", "position"])
+      .where("teamId", "in", (eb) => eb.selectFrom("teams").select("id").where("archivedAt", "is", null))
       .orderBy("teamId").orderBy("position");
     if (visible) q = q.where("teamId", "in", visible.length ? visible : ["00000000-0000-0000-0000-000000000000"]);
     return c.json((await q.execute()) satisfies WorkflowState[]);
@@ -223,6 +224,7 @@ export const teamRoutes = new Hono<AppEnv>()
   .get("/cycles", async (c) => {
     const visible = await visibleTeamIds(c);
     let q = c.get("trx").selectFrom("cycles").select(["id", "teamId", "number", "name", "startsOn", "endsOn", "completedAt"])
+      .where("teamId", "in", (eb) => eb.selectFrom("teams").select("id").where("archivedAt", "is", null))
       .orderBy("teamId").orderBy("number", "desc");
     if (visible) q = q.where("teamId", "in", visible.length ? visible : ["00000000-0000-0000-0000-000000000000"]);
     return c.json((await q.execute()).map(toCycle));

@@ -114,7 +114,7 @@ export async function findIssue(c: Ctx, ref: string): Promise<Issue> {
 export function applyFilters(q: ReturnType<typeof baseQuery>, f: IssueFilter, userId: string, visible: string[] | null) {
   if (visible) q = q.where("i.teamId", "in", visible.length ? visible : [NONE]);
   if (f.team) q = q.where("i.teamId", "=", f.team);
-  if (!f.includeArchived) q = q.where("i.archivedAt", "is", null);
+  if (!f.includeArchived) q = q.where("i.archivedAt", "is", null).where("t.archivedAt", "is", null);
   if (f.status?.length) q = q.where("i.statusId", "in", f.status);
   if (f.priority?.length) q = q.where("i.priority", "in", f.priority);
   if (f.parent) q = q.where("i.parentId", "=", f.parent);
@@ -509,7 +509,10 @@ export const issueRoutes = new Hono<AppEnv>()
       .where((eb) => eb.or([eb("issueId", "=", cur.id), eb("relatedIssueId", "=", cur.id)]))
       .returning(["issueId", "relatedIssueId", "type"]).executeTakeFirst();
     if (!r) throw notFound("Link not found");
-    await recordActivity(trx, c.get("ws").id, cur.id, user.id, "relation_removed", { type: r.type });
+    const otherId = r.issueId === cur.id ? r.relatedIssueId : r.issueId;
+    const other = await findIssue(c, otherId).catch(() => null);
+    await recordActivity(trx, c.get("ws").id, cur.id, user.id, "relation_removed", { type: r.type, issue: other?.identifier ?? null });
+    if (other) await recordActivity(trx, c.get("ws").id, other.id, user.id, "relation_removed", { type: r.type, issue: cur.identifier, incoming: true });
     await notify(trx, c.get("ws").id, { t: "issue", id: r.issueId });
     await notify(trx, c.get("ws").id, { t: "issue", id: r.relatedIssueId });
     return c.json({ ok: true });

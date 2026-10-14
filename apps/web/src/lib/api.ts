@@ -151,7 +151,8 @@ export const api = {
       deleteLabel: (id: string) => del<{ ok: true }>(`${w}/labels/${id}`),
 
       cycles: () => get<Cycle[]>(`${w}/cycles`),
-      createCycle: (teamId: string, b: { name?: string; startsOn: string; endsOn: string }) => post<Cycle>(`${w}/teams/${teamId}/cycles`, b),
+      createCycle: (teamId: string, b: { name?: string; startsOn: string; endsOn: string }) =>
+        post<Cycle>(`${w}/teams/${teamId}/cycles`, b),
       updateCycle: (id: string, b: { name?: string; startsOn?: string; endsOn?: string; completed?: boolean }) =>
         patch<Cycle>(`${w}/cycles/${id}`, b),
       deleteCycle: (id: string) => del<{ ok: true }>(`${w}/cycles/${id}`),

@@ -130,6 +130,16 @@ describe("workspaces, invites and roles", () => {
     expect((await late.post(`/api/v1/invites/${ltoken}/accept`)).status).toBe(404);
   });
 
+  it("invite previews work before signing in, and only with a valid token", async () => {
+    const { c } = await setupWorkspace(h, "owner@acme.co", "acme");
+    const inv = await c.ok("POST", "/api/v1/w/acme/invites", { role: "member" });
+    const anon = new Client(h);
+    const r = await anon.get(`/api/v1/invites/${inv.url.split("/").pop()}`);
+    expect(r.body).toEqual({ workspaceName: "ACME", slug: "acme", role: "member" });
+    expect((await anon.get("/api/v1/invites/not-a-real-token")).status).toBe(404);
+    expect((await anon.post(`/api/v1/invites/${inv.url.split("/").pop()}/accept`)).status).toBe(401);
+  });
+
   it("guests only see teams they were added to", async () => {
     const { c, team } = await setupWorkspace(h, "owner@acme.co", "acme");
     const other = await c.ok("POST", "/api/v1/w/acme/teams", { name: "Design", key: "DES" });
@@ -291,6 +301,21 @@ describe("issues", () => {
     expect((await c.ok("GET", "/api/v1/w/acme/issues?includeArchived=true")).issues).toHaveLength(1);
     await c.ok("DELETE", `/api/v1/w/acme/issues/${i.id}`);
     expect((await c.get(`/api/v1/w/acme/issues/${i.id}`)).status).toBe(404);
+  });
+
+  it("archiving a team hides its issues, statuses and cycles", async () => {
+    const { c, team } = await setupWorkspace(h, "o@acme.co", "acme");
+    const ops = await c.ok("POST", "/api/v1/w/acme/teams", { name: "Ops", key: "OPS" });
+    await c.ok("POST", `/api/v1/w/acme/teams/${ops.id}/cycles`, { startsOn: "2026-01-01", endsOn: "2026-01-02" });
+    const opsIssue = await c.ok("POST", "/api/v1/w/acme/issues", { teamId: ops.id, title: "ops work" });
+    await c.ok("POST", "/api/v1/w/acme/issues", { teamId: team.id, title: "core work" });
+    await c.ok("DELETE", `/api/v1/w/acme/teams/${ops.id}`);
+    const titles = (await c.ok("GET", "/api/v1/w/acme/issues")).issues.map((i: { title: string }) => i.title);
+    expect(titles).toEqual(["core work"]);
+    expect((await c.ok("GET", "/api/v1/w/acme/states")).every((s: { teamId: string }) => s.teamId === team.id)).toBe(true);
+    expect(await c.ok("GET", "/api/v1/w/acme/cycles")).toEqual([]);
+    // Still reachable directly, so links keep working.
+    expect((await c.ok("GET", `/api/v1/w/acme/issues/${opsIssue.identifier}`)).title).toBe("ops work");
   });
 
   it("saved views: private unless shared", async () => {

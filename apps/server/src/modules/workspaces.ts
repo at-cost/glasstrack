@@ -84,9 +84,11 @@ export const workspaceRootRoutes = new Hono<AppEnv>()
   .patch("/me", async (c) => {
     const user = requireUser(c);
     const body = z.object({ name: z.string().trim().min(1).max(80) }).parse(await c.req.json());
-    await asUser(c.get("deps").dbs.app, user.id, (trx) =>
-      trx.updateTable("users").set({ name: body.name }).where("id", "=", user.id).execute(),
-    );
+    await asUser(c.get("deps").dbs.app, user.id, async (trx) => {
+      await trx.updateTable("users").set({ name: body.name }).where("id", "=", user.id).execute();
+      const memberships = await trx.selectFrom("workspaceMembers").select("workspaceId").where("userId", "=", user.id).execute();
+      for (const m of memberships) await notify(trx, m.workspaceId, { t: "member", id: user.id });
+    });
     return c.json({ ok: true });
   })
   .post("/workspaces", async (c) => {
@@ -107,7 +109,6 @@ export const workspaceRootRoutes = new Hono<AppEnv>()
     return c.json({ id, slug: body.slug, name: body.name }, 201);
   })
   .get("/invites/:token", async (c) => {
-    requireUser(c);
     const inv = await c
       .get("deps")
       .dbs.system.selectFrom("invites as i")
