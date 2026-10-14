@@ -4,7 +4,7 @@ Working name: **Tracker** (placeholder until a product name is chosen).
 
 An open-source, MIT-licensed ticket tracker that anyone can self-host with every feature, and that is also run as a hosted multi-tenant service priced at cost with public finances. Because price equals cost, efficiency is a feature: the whole system must run for hundreds of teams on one 2 vCPU / 4 GB server.
 
-This document is the plan for approval before code is written. Sections marked **Decision** need an answer from the maintainer.
+This document was approved before code was written and is kept in step with the code. Sections marked **Decision** need an answer from the maintainer. Where the build differs from the original plan, it says so.
 
 ---
 
@@ -87,13 +87,13 @@ pnpm workspaces. The cost-allocation, ledger and pricing maths live in `packages
 
 | Role | Purpose | RLS |
 |---|---|---|
-| `tracker_owner` | Owns all tables, runs migrations. Never used by the running app. | n/a |
+| owner (the `DATABASE_URL` user) | Owns all tables, runs migrations, creates the two runtime roles on boot. Used at runtime only by pg-boss. | n/a |
 | `tracker_app` | Every HTTP request. `NOBYPASSRLS`. | Enforced |
-| `tracker_system` | Cross-workspace jobs (metering, digests, finance roll-up, backups) and pre-login auth lookups. Used only from `src/system/`, enforced by a lint rule. | Bypassed |
+| `tracker_system` | Cross-workspace jobs (digests, deletion, cleanup, later metering) and pre-sign-in auth lookups. | Explicit allow-all policy (`system_all`), not `BYPASSRLS`, so it works on RDS |
 
 ### Request flow
 
-1. Middleware authenticates the session cookie or API token, giving `user_id`.
+1. Middleware authenticates the session cookie (API tokens arrive in M4), giving `user_id`.
 2. Every request runs inside one transaction that starts with `SELECT set_config('app.user_id', $1, true)`.
 3. For workspace routes (`/api/v1/w/:slug/...`) a `SECURITY DEFINER` function `app.enter_workspace(slug)` checks membership of `app.user_id` and only then sets `app.workspace_id` (transaction-local). If the user is not a member it raises, so there is no code path that sets the workspace without a membership check.
 4. Transaction-local settings mean pooled connections never leak context, and it works behind PgBouncer in transaction mode.
@@ -116,11 +116,11 @@ Exceptions:
 - `workspace_members`: also readable where `user_id = app.user_id` (so a user can list their own workspaces).
 - `workspaces`: readable where the user is a member.
 
-A CI test queries `pg_catalog` and fails if any table with a `workspace_id` column lacks `relrowsecurity`, `relforcerowsecurity` and a policy. Role checks (admin/member/guest) are enforced in the application layer; RLS is the tenant wall.
+A test queries `pg_catalog` and fails if any table with a `workspace_id` column lacks `relrowsecurity`, `relforcerowsecurity` and a `tracker_app` policy. Role checks (admin/member/guest) and guest team scoping are enforced in the application layer; RLS is the tenant wall.
 
 ### Isolation tests
 
-For every tenant table, the integration suite creates workspaces A and B, writes rows in each, then as a member of A: selects, updates, deletes and inserts with B's `workspace_id`, by id and via search, export and SSE. All must return nothing or fail.
+`apps/server/test/rls.test.ts` creates workspaces A and B with rows in every tenant table (it asserts that), then as a member of A tries every API route of B, B's issue ids and keys inside A, cross-workspace references (labels, parents, assignees, relations), search and listings, and, directly as `tracker_app`, selects, updates and inserts against B in every tenant table. It also checks the workspace setting never leaks between pooled connections.
 
 ---
 
@@ -231,7 +231,7 @@ M4:  /w/:slug/tokens, /w/:slug/webhooks, /w/:slug/import/{linear|jira|trello},
      POST /api/v1/github/webhook
 ```
 
-Reads use cursor pagination on `(sort column, id)`. Writes return the updated entity so optimistic updates can reconcile.
+Issue lists use `limit`/`offset` (default 500, max 2000), simple and fast enough at per-team sizes; switch to keyset pagination if teams grow past tens of thousands of open issues. Writes return the updated entity so optimistic updates can reconcile. Magic-link tokens are consumed by a POST from the SPA, so email link scanners can't burn them.
 
 ### Security
 
@@ -305,7 +305,7 @@ Public `/finances` page: daily roll-up into `finance_daily`, history charts, CSV
 2. **Starter credit accounting** (Decision 2): is spend paid by starter credit revenue (and so counted in "paying workspaces"), or a promotional cost? Recommendation: treat it as a marketing cost line shown publicly, and count only card-funded workspaces as paying.
 3. **Price only goes down vs rising costs**: if AWS or Stripe raise prices, the reserve absorbs it. If the reserve runs out, the rule must break or the service runs at a loss. Recommend stating that policy publicly now.
 4. **Flat price vs per-member cost**: large teams cost more but pay the same flat fee. Acceptable by design, but it shapes who the allocation formula favours; worth stating on the finances page.
-5. **`BYPASSRLS` on RDS**: the system role needs it. If RDS refuses, fallback is per-workspace iteration for jobs plus a policy clause for `tracker_system`. Test early on RDS.
+5. ~~`BYPASSRLS` on RDS~~ Resolved: the system role uses an explicit `system_all` policy instead, so no superuser-only attribute is needed. The `DATABASE_URL` user needs `CREATEROLE` once to create the runtime roles.
 6. **SSE connection limits**: browsers allow 6 HTTP/1.1 connections per origin; with many tabs SSE can starve requests. Mitigation: serve over HTTP/2 (Caddy in front) and share one stream across tabs via `BroadcastChannel`.
 7. **Single server**: one EC2 box is a single point of failure. Backups plus restore-verify limit data loss; downtime risk is accepted at this scale and published.
 8. **Full-text search quality**: Postgres FTS is good enough for titles and descriptions but lacks typo tolerance. `pg_trgm` can be added later without new infrastructure.
@@ -313,6 +313,10 @@ Public `/finances` page: daily roll-up into `finance_daily`, history charts, CSV
 10. **Clean-room**: no code, icons or visual style copied from Linear, Plane or Jira. Plane is AGPL, so its code must not be read for implementation detail. Original colour palette and layout.
 11. **Product name** (Decision 3): needed before public launch, domain purchase and README.
 
-### Environment note
+## 10. As built (Milestone 1)
 
-Docker is not installed on the build machine. Milestone 1 will be developed and tested against a local Postgres 16; the Dockerfile and `docker compose up` path can only be verified once Docker (or OrbStack) is installed, or in CI.
+- Exports are a streamed `.tar.gz` (workspace.json, issues.csv, comments.csv, attachments/), not a zip: streaming tar has no 4 GB limit and needs no dependency. CSV cells starting with `= + - @` are prefixed to stop formula injection.
+- The server ships as one tsup bundle, so the runtime Docker image has no `node_modules` (node:22-alpine + pg client tools + ~3.5 MB of JS).
+- Background jobs: pg-boss queues `export.workspace`, `workspace.delete`, `notifications.digest` (every 15 min, honours hourly/daily per user), `maintenance.cleanup` (hourly) and `backup.run` (cron, when `BACKUP_ENABLED`). Jobs are enqueued after the request transaction commits.
+- Backups: `node dist/backup.js` or the scheduled job writes `backups/tracker-<timestamp>.dump`; `node dist/restore-verify.js` restores the newest into a scratch database, runs sanity checks and drops it (exit code 1 on failure, for cron alerts).
+- Docker was not available on the build machine, so the image and `docker compose up` are verified in CI (the `docker` job boots the stack and checks `/ready`), not locally.

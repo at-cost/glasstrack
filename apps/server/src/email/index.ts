@@ -1,3 +1,4 @@
+import { appendFile } from "node:fs/promises";
 import nodemailer from "nodemailer";
 import type { Config } from "../config";
 import { logger } from "../lib/logger";
@@ -16,13 +17,23 @@ export interface Mailer {
 /**
  * One interface for every provider. AWS SES is used through its SMTP endpoint
  * (SMTP_URL=smtps://KEY:SECRET@email-smtp.<region>.amazonaws.com:465), so no
- * AWS SDK is needed. Without SMTP_URL, emails are logged (development).
+ * AWS SDK is needed. Without SMTP_URL, emails are logged (development);
+ * SMTP_URL=file:///path/mail.jsonl appends them to a file (tests).
  */
 export function createMailer(config: Config): Mailer {
   if (!config.SMTP_URL) {
     return {
       async send(msg) {
         logger.info({ email: { to: msg.to, subject: msg.subject }, text: msg.text }, "email (not sent: SMTP_URL unset)");
+      },
+    };
+  }
+  if (config.SMTP_URL.startsWith("file://")) {
+    // Development and end-to-end tests: append each email as a JSON line.
+    const file = config.SMTP_URL.slice("file://".length);
+    return {
+      async send(msg) {
+        await appendFile(file, `${JSON.stringify({ ...msg, at: new Date().toISOString() })}\n`);
       },
     };
   }
