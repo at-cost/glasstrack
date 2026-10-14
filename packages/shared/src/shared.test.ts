@@ -10,7 +10,10 @@ describe("keyBetween", () => {
   });
   it("always returns a key strictly between its bounds", () => {
     let seed = 42;
-    const rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    const rand = () => {
+      seed = (seed * 1103515245 + 12345) % 2 ** 31;
+      return seed / 2 ** 31;
+    };
     const keys: string[] = [keyBetween(null, null)];
     for (let i = 0; i < 3000; i++) {
       const pos = Math.floor(rand() * (keys.length + 1));

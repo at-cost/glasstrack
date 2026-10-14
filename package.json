@@ -11,7 +11,7 @@
     "dev": "pnpm -r --parallel --filter ./apps/* dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "lint": "biome check .",
+    "lint": "biome lint .",
     "format": "biome format --write .",
     "test": "pnpm -r test",
     "test:e2e": "playwright test",

@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "files": {
+    "includes": ["**", "!**/dist", "!**/node_modules", "!**/.test-data", "!**/playwright-report", "!**/test-results", "!pnpm-lock.yaml"]
+  },
+  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 140 },
+  "assist": { "actions": { "source": { "organizeImports": "off" } } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "style": { "noNonNullAssertion": "off", "useTemplate": "off" },
+      "suspicious": { "noExplicitAny": "off" },
+      "complexity": { "noForEach": "off" }
+    }
+  },
+  "javascript": { "formatter": { "quoteStyle": "double", "trailingCommas": "all" } }
+}

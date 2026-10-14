@@ -22,6 +22,8 @@ export interface Storage {
   size(key: string): Promise<number | null>;
   delete(key: string): Promise<void>;
   deletePrefix(prefix: string): Promise<void>;
+  /** Keys under a prefix (used for backups). */
+  list(prefix: string): Promise<string[]>;
 }
 
 const TTL_SECONDS = 15 * 60;
@@ -93,6 +95,12 @@ export function localStorage(config: Config): Storage & { pathFor(key: string): 
     },
     async deletePrefix(prefix) {
       await rm(pathFor(prefix), { recursive: true, force: true });
+    },
+    async list(prefix) {
+      const dir = path.dirname(pathFor(`${prefix}x`));
+      const files = await listLocalFiles(dir);
+      const rel = path.relative(root, dir);
+      return files.map((f) => path.join(rel, f).split(path.sep).join("/")).filter((k) => k.startsWith(prefix)).sort();
     },
   };
 }
@@ -179,6 +187,22 @@ export function s3Storage(config: Config): Storage {
         if (keys.length === 0) return;
         for (const k of keys) await this.delete(k.replace(/&amp;/g, "&"));
       }
+    },
+    async list(prefix) {
+      const out: string[] = [];
+      let token = "";
+      for (;;) {
+        const res = await check(
+          await client.fetch(`${bucketUrl()}?list-type=2&prefix=${encodeURIComponent(prefix)}${token ? `&continuation-token=${encodeURIComponent(token)}` : ""}`),
+          "list",
+        );
+        const xml = await res.text();
+        out.push(...[...xml.matchAll(/<Key>([^<]+)<\/Key>/g)].map((m) => m[1]!.replace(/&amp;/g, "&")));
+        const next = /<NextContinuationToken>([^<]+)<\/NextContinuationToken>/.exec(xml);
+        if (!next) break;
+        token = next[1]!;
+      }
+      return out.sort();
     },
   };
 }

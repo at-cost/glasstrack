@@ -1,0 +1,67 @@
+# Self-host: cp .env.example .env, run scripts/init-env.sh (fills secrets), then `docker compose up -d`.
+# Optional profiles: `--profile tls` (Caddy with automatic HTTPS), `--profile s3` (MinIO), `--profile mail` (Mailpit).
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tracker
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: tracker
+    command: ["postgres", "-c", "shared_buffers=${PG_SHARED_BUFFERS:-256MB}", "-c", "max_connections=60"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tracker -d tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    image: tracker:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://tracker:${POSTGRES_PASSWORD}@postgres:5432/tracker}
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    volumes:
+      - appdata:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    profiles: ["tls"]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    depends_on: [app]
+
+  minio:
+    profiles: ["s3"]
+    image: minio/minio:latest # dev/testing only
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-minio}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-minio-secret}
+    ports: ["9000:9000", "9001:9001"]
+    volumes:
+      - miniodata:/data
+
+  mailpit:
+    profiles: ["mail"]
+    image: axllent/mailpit:latest # dev/testing only
+    ports: ["8025:8025", "1025:1025"]
+
+volumes:
+  pgdata:
+  appdata:
+  caddydata:
+  miniodata:
