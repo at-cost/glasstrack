@@ -4,6 +4,9 @@ export interface JobPayloads {
   "notifications.digest": Record<string, never>;
   "maintenance.cleanup": Record<string, never>;
   "backup.run": Record<string, never>;
+  "billing.daily": Record<string, never>;
+  "billing.autotopup": { workspaceId: string };
+  "billing.fees": Record<string, never>;
 }
 export type JobName = keyof JobPayloads;
 

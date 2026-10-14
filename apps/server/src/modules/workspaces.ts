@@ -106,6 +106,10 @@ export const workspaceRootRoutes = new Hono<AppEnv>()
       if ((e as { code?: string }).code === "23505") throw conflict("That workspace URL is taken");
       throw e;
     }
+    if (c.get("deps").config.BILLING_ENABLED) {
+      const { grantStarterCredit } = await import("../billing/service");
+      await grantStarterCredit(c.get("deps"), { workspaceId: id, userId: user.id });
+    }
     return c.json({ id, slug: body.slug, name: body.name }, 201);
   })
   .get("/invites/:token", async (c) => {

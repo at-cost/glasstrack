@@ -207,6 +207,18 @@ export const handlers: Handlers = {
   "workspace.delete": deleteWorkspace,
   "notifications.digest": (deps) => sendDigests(deps),
   "maintenance.cleanup": (deps) => cleanup(deps),
+  "billing.daily": async (deps) => {
+    const { runDailyBilling } = await import("../billing/service");
+    await runDailyBilling(deps);
+  },
+  "billing.autotopup": async (deps, { workspaceId }) => {
+    const { runAutoTopup } = await import("../billing/service");
+    await runAutoTopup(deps, workspaceId);
+  },
+  "billing.fees": async (deps) => {
+    const { backfillFees } = await import("../billing/service");
+    await backfillFees(deps);
+  },
   "backup.run": async (deps) => {
     const { runBackup } = await import("./backup");
     await runBackup(deps);

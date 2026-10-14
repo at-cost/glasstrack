@@ -6,7 +6,7 @@ import { ApiError, notFound } from "../lib/errors";
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 /** Paths still writable when a workspace is read-only (export must always work). */
-const READ_ONLY_ALLOWED = [/\/exports$/, /\/notifications\/read$/];
+const READ_ONLY_ALLOWED = [/\/exports$/, /\/notifications\/read$/, /\/billing\/topup$/, /\/billing\/auto-topup$/];
 
 /**
  * Wraps every /w/:slug request in one transaction as glasstrack_app with the

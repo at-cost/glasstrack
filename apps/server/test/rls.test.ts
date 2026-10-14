@@ -1,5 +1,6 @@
 import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { runDailyBilling } from "../src/billing/service";
 import { type Client, createHarness, type Harness, setupWorkspace } from "./harness";
 
 /**
@@ -39,7 +40,7 @@ async function fillWorkspace(w: { c: Client; slug: string; team: { id: string } 
 }
 
 beforeAll(async () => {
-  h = await createHarness();
+  h = await createHarness({ BILLING_ENABLED: "true" });
   await h.reset();
   a = await setupWorkspace(h, "alice@a.example", "alpha");
   b = await setupWorkspace(h, "bob@b.example", "bravo");
@@ -52,6 +53,16 @@ beforeAll(async () => {
   await carol.c.ok("POST", `/api/v1/w/bravo/issues/${bIssue.id}/comments`, { body: "ping" });
   await b.c.ok("POST", `/api/v1/w/bravo/exports`);
   bWorkspaceId = (await b.c.ok("GET", "/api/v1/w/bravo")).id;
+  // Billing rows for B: a paid top-up through the webhook, then a daily charge.
+  await b.c.ok("POST", "/api/v1/w/bravo/billing/topup", { amountUsd: 20 });
+  const pay = h.payments.calls.find((x) => x.method === "createTopupCheckout")!.args as { paymentId: string; workspaceId: string };
+  const ev = await h.payments.sign({
+    id: "evt_rls_1", object: "event", type: "checkout.session.completed",
+    data: { object: { id: "cs_rls", object: "checkout.session", payment_status: "paid", payment_intent: "pi_rls", amount_total: 2000,
+      metadata: { kind: "topup", workspace_id: pay.workspaceId, payment_id: pay.paymentId } } },
+  });
+  await h.app.request("/api/v1/stripe/webhook", { method: "POST", headers: { "stripe-signature": ev.signature, "content-type": "application/json" }, body: ev.body });
+  await runDailyBilling(h.deps);
 });
 
 afterAll(async () => {
@@ -141,10 +152,21 @@ describe("database-level isolation as glasstrack_app", () => {
       await h.deps.dbs.app.transaction().execute(async (trx) => {
         await sql`SELECT set_config('app.user_id', ${alice.id}, true)`.execute(trx);
         await sql`SELECT * FROM app.enter_workspace('alpha')`.execute(trx);
-        const seen = await sql<{ n: string }>`SELECT count(*) AS n FROM ${sql.table(table)} WHERE workspace_id = ${bWorkspaceId}`.execute(trx);
+        // A table the app role can't read at all is isolated too.
+        await sql`SAVEPOINT probe`.execute(trx);
+        const seen = await sql<{ n: string }>`SELECT count(*) AS n FROM ${sql.table(table)} WHERE workspace_id = ${bWorkspaceId}`.execute(trx)
+          .catch(async (e: { code?: string }) => {
+            if (e.code !== "42501") throw e;
+            await sql`ROLLBACK TO SAVEPOINT probe`.execute(trx);
+            return { rows: [{ n: "0" }] };
+          });
         expect(Number(seen.rows[0]!.n), `${table} leaked B rows`).toBe(0);
+        await sql`SAVEPOINT probe2`.execute(trx);
         const upd = await sql`UPDATE ${sql.table(table)} SET workspace_id = workspace_id WHERE workspace_id = ${bWorkspaceId}`.execute(trx)
-          .catch((e: { code?: string }) => ({ numAffectedRows: e.code === "42501" ? 0n : -1n }));
+          .catch(async (e: { code?: string }) => {
+            await sql`ROLLBACK TO SAVEPOINT probe2`.execute(trx);
+            return { numAffectedRows: e.code === "42501" ? 0n : -1n };
+          });
         expect(Number(upd.numAffectedRows ?? 0n), `${table} update reached B`).toBe(0);
       });
     }
@@ -157,8 +179,8 @@ describe("database-level isolation as glasstrack_app", () => {
       const r = await sql<{ n: string }>`SELECT count(*) AS n FROM ${sql.table(table)} WHERE workspace_id = ${bWorkspaceId}`.execute(h.deps.dbs.owner);
       if (Number(r.rows[0]!.n) === 0) empty.push(table);
     }
-    // Key aliases only exist after a team rename.
-    expect(empty).toEqual(["team_key_aliases"]);
+    // Key aliases only exist after a team rename; metering tables fill in the M3 tests.
+    expect(empty).toEqual(["team_key_aliases", "usage_daily", "workspace_cost_daily"]);
   });
 
   it("inserting a row tagged with B's workspace_id is rejected", async () => {
@@ -186,7 +208,11 @@ describe("database-level isolation as glasstrack_app", () => {
     const tables = (await TENANT_TABLES_SQL.execute(h.deps.dbs.owner)).rows.map((r) => r.tableName);
     for (const table of tables) {
       const r = await h.deps.dbs.app.transaction().execute((trx) =>
-        sql<{ n: string }>`SELECT count(*) AS n FROM ${sql.table(table)}`.execute(trx),
+        sql<{ n: string }>`SELECT count(*) AS n FROM ${sql.table(table)}`.execute(trx)
+          .catch((e: { code?: string }) => {
+            if (e.code !== "42501") throw e;
+            return { rows: [{ n: "0" }] };
+          }),
       );
       expect(Number(r.rows[0]!.n), table).toBe(0);
     }

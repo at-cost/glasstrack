@@ -8,6 +8,8 @@ export interface EmailMessage {
   subject: string;
   text: string;
   html?: string;
+  /** For per-workspace email metering. */
+  workspaceId?: string;
 }
 
 export interface Mailer {
@@ -33,14 +35,14 @@ export function createMailer(config: Config): Mailer {
     const file = config.SMTP_URL.slice("file://".length);
     return {
       async send(msg) {
-        await appendFile(file, `${JSON.stringify({ ...msg, at: new Date().toISOString() })}\n`);
+        await appendFile(file, `${JSON.stringify({ to: msg.to, subject: msg.subject, text: msg.text, at: new Date().toISOString() })}\n`);
       },
     };
   }
   const transport = nodemailer.createTransport(config.SMTP_URL);
   return {
     async send(msg) {
-      await transport.sendMail({ from: config.EMAIL_FROM, ...msg });
+      await transport.sendMail({ from: config.EMAIL_FROM, to: msg.to, subject: msg.subject, text: msg.text, html: msg.html });
     },
   };
 }

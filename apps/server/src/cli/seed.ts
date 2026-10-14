@@ -4,6 +4,7 @@
  * Then sign in with that email (magic link is printed in the server log).
  */
 import { createApp } from "../app";
+import { disabledGateway } from "../billing/gateway";
 import { findOrCreateUser } from "../auth/routes";
 import { loadConfig } from "../config";
 import type { Deps } from "../context";
@@ -25,6 +26,7 @@ let deps!: Deps;
 deps = {
   config, dbs, mailer: createMailer(config), storage: createStorage(config), hub: new RealtimeHub(dbs.systemPool),
   jobs: createInlineJobs(() => deps),
+  payments: disabledGateway(),
   limits: { auth: new RateLimiter(1e6, 60_000), api: new RateLimiter(1e6, 60_000) },
 };
 const app = createApp(deps);

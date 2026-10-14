@@ -9,5 +9,6 @@ export const testEnv: Record<string, string> = {
   STORAGE_DRIVER: "local",
   STORAGE_LOCAL_DIR: "./.test-data/files",
   E2E_TEST_LOGIN: "true",
+  STRIPE_WEBHOOK_SECRET: "whsec_test_secret_for_glasstrack",
   LOG_LEVEL: process.env.TEST_LOG_LEVEL ?? "silent",
 };

@@ -29,6 +29,13 @@ export async function createBossJobs(config: Config): Promise<Jobs & { boss: PgB
       }
       await boss.schedule("notifications.digest", "*/15 * * * *");
       await boss.schedule("maintenance.cleanup", "30 * * * *");
+      if (config.BILLING_ENABLED) {
+        await boss.schedule("billing.daily", "10 0 * * *", null, { tz: "UTC" });
+        await boss.schedule("billing.fees", "20 * * * *");
+      } else {
+        await boss.unschedule("billing.daily").catch(() => undefined);
+        await boss.unschedule("billing.fees").catch(() => undefined);
+      }
       if (config.BACKUP_ENABLED) await boss.schedule("backup.run", config.BACKUP_CRON);
       else await boss.unschedule("backup.run").catch(() => undefined);
       logger.info("job workers started");

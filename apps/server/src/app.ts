@@ -6,6 +6,8 @@ import { secureHeaders } from "hono/secure-headers";
 import { sql } from "kysely";
 import { ZodError } from "zod";
 import { authRoutes } from "./auth/routes";
+import { billingRoutes } from "./billing/routes";
+import { stripeWebhookRoutes } from "./billing/webhook";
 import { sessionMiddleware } from "./auth/session";
 import type { AppEnv, Deps } from "./context";
 import { ApiError } from "./lib/errors";
@@ -88,6 +90,7 @@ export function createApp(deps: Deps) {
   });
 
   api.route("/auth", authRoutes);
+  api.route("/stripe", stripeWebhookRoutes);
   api.route("/files", fileRoutes);
   api.route("/", workspaceRootRoutes);
   api.route("/w/:slug", realtimeRoutes);
@@ -101,6 +104,7 @@ export function createApp(deps: Deps) {
   ws.route("/", viewRoutes);
   ws.route("/", notificationRoutes);
   ws.route("/", exportRoutes);
+  ws.route("/", billingRoutes);
   api.route("/w/:slug", ws);
   api.all("*", (c) => c.json({ error: { code: "not_found", message: "Not found" } }, 404));
   app.route("/api/v1", api);

@@ -1,5 +1,6 @@
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
+import { disabledGateway, stripeGateway } from "./billing/gateway";
 import { loadConfig } from "./config";
 import type { Deps } from "./context";
 import { createDatabases, ensureRoles, migrateToLatest } from "./db";
@@ -27,9 +28,15 @@ const deps: Deps = {
   storage: createStorage(config),
   hub,
   jobs,
+  payments: config.STRIPE_SECRET_KEY ? stripeGateway(config) : disabledGateway(),
   limits: { auth: new RateLimiter(10, 15 * 60_000), api: new RateLimiter(600, 60_000) },
 };
 
+if (config.BILLING_ENABLED) {
+  // Seed the price before anything can compare against it.
+  const { currentPriceMicro } = await import("./billing/service");
+  await currentPriceMicro(deps);
+}
 if (config.WORKER_MODE !== "off") await jobs.startWorkers(deps);
 
 let server: ReturnType<typeof serve> | null = null;

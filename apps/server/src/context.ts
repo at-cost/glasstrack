@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import type { Role } from "@glasstrack/shared";
+import type { PaymentGateway } from "./billing/gateway";
 import type { Config } from "./config";
 import type { Databases } from "./db";
 import type { Tx, WorkspaceCtx } from "./db/tenant";
@@ -17,6 +18,7 @@ export interface Deps {
   storage: Storage;
   hub: RealtimeHub;
   jobs: Jobs;
+  payments: PaymentGateway;
   limits: { auth: RateLimiter; api: RateLimiter };
 }
 

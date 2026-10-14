@@ -10,6 +10,7 @@ import { RateLimiter } from "../src/lib/rateLimit";
 import { RealtimeHub } from "../src/realtime/hub";
 import { createStorage } from "../src/storage";
 import { testEnv } from "./env";
+import { fakeStripe } from "./fakeStripe";
 
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
@@ -20,6 +21,7 @@ export async function createHarness(overrides: Record<string, string> = {}) {
   let deps!: Deps;
   const jobs = createInlineJobs(() => deps);
   const hub = new RealtimeHub(dbs.systemPool);
+  const payments = fakeStripe();
   deps = {
     config,
     dbs,
@@ -27,17 +29,23 @@ export async function createHarness(overrides: Record<string, string> = {}) {
     storage: createStorage(config),
     hub,
     jobs,
+    payments,
     limits: { auth: new RateLimiter(1000, 60_000), api: new RateLimiter(100_000, 60_000) },
   };
   const app = createApp(deps);
   return {
     deps,
     app,
+    payments,
     mailer,
     jobs,
     /** Truncates every table between tests (RLS is irrelevant to the owner). */
     async reset() {
-      await sql.raw(`TRUNCATE users, workspaces, sessions, magic_links, auth_identities CASCADE`).execute(dbs.owner);
+      await sql.raw(`TRUNCATE users, workspaces, sessions, magic_links, auth_identities, payments, starter_credit_claims, stripe_events, cost_entries, finance_daily CASCADE`).execute(dbs.owner);
+      // The ledger is append-only by trigger; tests bypass it as the owner.
+      await sql.raw(`ALTER TABLE credit_ledger DISABLE TRIGGER ledger_append_only; TRUNCATE credit_ledger; ALTER TABLE credit_ledger ENABLE TRIGGER ledger_append_only;
+        ALTER TABLE pricing_config DISABLE TRIGGER USER; TRUNCATE pricing_config RESTART IDENTITY; ALTER TABLE pricing_config ENABLE TRIGGER USER;`).execute(dbs.owner);
+      payments.calls.length = 0;
       mailer.outbox.length = 0;
       jobs.ran.length = 0;
     },

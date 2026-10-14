@@ -9,6 +9,7 @@ type Json<T> = ColumnType<T, T | string, T | string>;
 /** numeric comes back as string from pg; we parse it in mappers */
 type Numeric = ColumnType<string, number | string, number | string>;
 type BigIntCol = ColumnType<string, number | bigint | string, number | bigint | string>;
+type BigIntDefault = ColumnType<string, number | bigint | string | undefined, number | bigint | string>;
 
 export interface UsersTable {
   id: string;
@@ -236,6 +237,113 @@ export interface ExportsTable {
   expiresAt: Ts | null;
 }
 
+export interface PricingConfigTable {
+  id: Generated<number>;
+  effectiveFrom: TsDefault;
+  monthlyPriceMicro: BigIntCol;
+  reason: string;
+  createdBy: Generated<string>;
+}
+export interface CreditLedgerTable {
+  id: Generated<string>;
+  workspaceId: string;
+  kind: "starter_grant" | "topup" | "charge" | "storage_charge" | "refund" | "adjustment";
+  amountMicro: BigIntCol;
+  idempotencyKey: string;
+  refType: string | null;
+  refId: string | null;
+  memo: string | null;
+  createdBy: Generated<string>;
+  createdAt: TsDefault;
+}
+export interface BillingAccountsTable {
+  workspaceId: string;
+  stripeCustomerId: string | null;
+  defaultPaymentMethod: string | null;
+  cardLabel: string | null;
+  autoTopupEnabled: Generated<boolean>;
+  autoTopupThresholdMicro: BigIntDefault;
+  autoTopupAmountMicro: BigIntDefault;
+  graceStartedAt: Ts | null;
+  warningsSent: Generated<number>;
+  lastChargedOn: DateOnly | null;
+  updatedAt: TsDefault;
+}
+export interface PaymentsTable {
+  id: string;
+  workspaceId: string;
+  kind: "topup" | "auto_topup";
+  stripeCheckoutSessionId: string | null;
+  stripePaymentIntentId: string | null;
+  amountMicro: BigIntCol;
+  feeMicro: BigIntCol | null;
+  netMicro: BigIntCol | null;
+  currency: Generated<string>;
+  status: "pending" | "succeeded" | "failed" | "refunded";
+  createdAt: TsDefault;
+  succeededAt: Ts | null;
+}
+export interface StarterCreditClaimsTable {
+  id: string;
+  emailHash: string;
+  domain: string;
+  workspaceId: string;
+  createdAt: TsDefault;
+}
+export interface StripeEventsTable {
+  eventId: string;
+  type: string;
+  receivedAt: TsDefault;
+  processedAt: Ts | null;
+}
+export interface UsageDailyTable {
+  workspaceId: string;
+  day: DateOnly;
+  activeMembers: Generated<number>;
+  storageBytes: BigIntDefault;
+  emailsSent: Generated<number>;
+  apiRequests: Generated<number>;
+}
+export interface WorkspaceCostDailyTable {
+  workspaceId: string;
+  day: DateOnly;
+  sharedMicro: BigIntCol;
+  storageMicro: BigIntCol;
+  emailMicro: BigIntCol;
+  feesMicro: BigIntCol;
+  totalMicro: BigIntCol;
+}
+export interface CostEntriesTable {
+  id: string;
+  periodStart: DateOnly;
+  periodEnd: DateOnly;
+  category: "infrastructure" | "email" | "storage" | "domain" | "tools" | "ai" | "other";
+  source: "aws" | "manual";
+  amountMicro: BigIntCol;
+  publicLabel: string;
+  note: string | null;
+  externalKey: string | null;
+  createdBy: Generated<string>;
+  createdAt: TsDefault;
+}
+export interface FinanceDailyTable {
+  day: DateOnly;
+  revenueMicro: BigIntCol;
+  starterUsedMicro: BigIntCol;
+  costs: Json<Record<string, number>>;
+  paymentFeesMicro: BigIntCol;
+  totalCostMicro: BigIntCol;
+  activeWorkspaces: number;
+  payingWorkspaces: number;
+  costPerWorkspaceMicro: BigIntCol;
+  reserveMicro: BigIntCol;
+  reserveTargetMicro: BigIntCol;
+  priceMicro: BigIntCol;
+  recommendedPriceMicro: BigIntCol | null;
+  marginBp: number;
+  computedAt: TsDefault;
+}
+
 export interface DB {
   users: UsersTable;
   authIdentities: AuthIdentitiesTable;
@@ -261,6 +369,16 @@ export interface DB {
   notifications: NotificationsTable;
   notificationSettings: NotificationSettingsTable;
   exports: ExportsTable;
+  pricingConfig: PricingConfigTable;
+  creditLedger: CreditLedgerTable;
+  billingAccounts: BillingAccountsTable;
+  payments: PaymentsTable;
+  starterCreditClaims: StarterCreditClaimsTable;
+  stripeEvents: StripeEventsTable;
+  usageDaily: UsageDailyTable;
+  workspaceCostDaily: WorkspaceCostDailyTable;
+  costEntries: CostEntriesTable;
+  financeDaily: FinanceDailyTable;
 }
 
 export type UserRow = Selectable<UsersTable>;
