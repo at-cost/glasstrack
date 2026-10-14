@@ -48,7 +48,11 @@ export function createDatabases(config: Config): Databases {
     max: Math.max(3, Math.floor(config.DB_POOL_SIZE / 2)),
   });
   for (const p of [ownerPool, appPool, systemPool]) {
-    p.on("error", (err) => logger.error({ err }, "idle postgres client error"));
+    p.on("error", (err) => {
+      // 57P01: the server is restarting or was told to drop connections; the pool reconnects.
+      const expected = (err as { code?: string }).code === "57P01";
+      logger[expected ? "warn" : "error"]({ err }, "idle postgres client error");
+    });
   }
   const owner = kysely(ownerPool);
   const app = kysely(appPool);
