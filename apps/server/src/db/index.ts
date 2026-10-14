@@ -17,9 +17,9 @@ export interface Databases {
   /** Owner: migrations and pg-boss only. Never used for request handling. */
   owner: Db;
   ownerPool: pg.Pool;
-  /** tracker_app: subject to row-level security. */
+  /** glasstrack_app: subject to row-level security. */
   app: Db;
-  /** tracker_system: cross-workspace jobs and pre-auth lookups. */
+  /** glasstrack_system: cross-workspace jobs and pre-auth lookups. */
   system: Db;
   /** Raw pool on the system role, for LISTEN. */
   systemPool: pg.Pool;
@@ -40,11 +40,11 @@ function kysely(pool: pg.Pool): Db {
 export function createDatabases(config: Config): Databases {
   const ownerPool = new pg.Pool({ connectionString: config.DATABASE_URL, max: 3 });
   const appPool = new pg.Pool({
-    connectionString: withUser(config.DATABASE_URL, "tracker_app", config.DB_APP_PASSWORD),
+    connectionString: withUser(config.DATABASE_URL, "glasstrack_app", config.DB_APP_PASSWORD),
     max: config.DB_POOL_SIZE,
   });
   const systemPool = new pg.Pool({
-    connectionString: withUser(config.DATABASE_URL, "tracker_system", config.DB_SYSTEM_PASSWORD),
+    connectionString: withUser(config.DATABASE_URL, "glasstrack_system", config.DB_SYSTEM_PASSWORD),
     max: Math.max(3, Math.floor(config.DB_POOL_SIZE / 2)),
   });
   for (const p of [ownerPool, appPool, systemPool]) {
@@ -75,8 +75,8 @@ export function createDatabases(config: Config): Databases {
  */
 export async function ensureRoles(owner: Db, config: Config): Promise<void> {
   const roles: [string, string][] = [
-    ["tracker_app", config.DB_APP_PASSWORD],
-    ["tracker_system", config.DB_SYSTEM_PASSWORD],
+    ["glasstrack_app", config.DB_APP_PASSWORD],
+    ["glasstrack_system", config.DB_SYSTEM_PASSWORD],
   ];
   for (const [role, password] of roles) {
     const exists = await sql<{ n: number }>`SELECT 1 AS n FROM pg_roles WHERE rolname = ${role}`.execute(owner);
@@ -86,9 +86,9 @@ export async function ensureRoles(owner: Db, config: Config): Promise<void> {
     await sql.raw(stmt.rows[0]!.q).execute(owner);
   }
   const db = await sql<{ d: string }>`SELECT current_database() AS d`.execute(owner);
-  await sql.raw(`GRANT CONNECT ON DATABASE "${db.rows[0]!.d}" TO tracker_app, tracker_system`).execute(owner);
-  // The owner must be able to hand functions over to tracker_system.
-  await sql.raw("GRANT tracker_system TO CURRENT_USER").execute(owner).catch(() => undefined);
+  await sql.raw(`GRANT CONNECT ON DATABASE "${db.rows[0]!.d}" TO glasstrack_app, glasstrack_system`).execute(owner);
+  // The owner must be able to hand functions over to glasstrack_system.
+  await sql.raw("GRANT glasstrack_system TO CURRENT_USER").execute(owner).catch(() => undefined);
 }
 
 export function migrator(owner: Db): Migrator {

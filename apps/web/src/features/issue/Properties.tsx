@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { type IssueDetail, PRIORITY_LABELS } from "@tracker/shared";
+import { type IssueDetail, PRIORITY_LABELS } from "@glasstrack/shared";
 import { Calendar, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Avatar, LabelDot, PriorityIcon, StatusIcon } from "../../components/icons";

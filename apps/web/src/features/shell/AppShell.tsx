@@ -122,7 +122,7 @@ function Shell() {
           <button type="button" className="icon-btn" aria-label="Open menu" aria-expanded={state.navOpen} onClick={() => ui.setNav(true)}>
             <Menu size={18} />
           </button>
-          <span className="mobile-title">Tracker</span>
+          <span className="mobile-title">Glasstrack</span>
           <button type="button" className="icon-btn" aria-label="Search" onClick={ui.openPalette}>
             <Search size={18} />
           </button>

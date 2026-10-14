@@ -34,7 +34,7 @@ async function sessionFor(addr: string, name: string) {
   const userId = await findOrCreateUser(dbs.system, { email: addr, name });
   const token = newToken();
   await dbs.system.insertInto("sessions").values({ id: uuid7(), userId, tokenHash: sha256(token), expiresAt: new Date(Date.now() + 3600_000) }).execute();
-  const cookie = `${config.secureCookies ? "__Host-tracker_session" : "tracker_session"}=${token}`;
+  const cookie = `${config.secureCookies ? "__Host-glasstrack_session" : "glasstrack_session"}=${token}`;
   return async (method: string, path: string, body?: unknown) => {
     const res = await app.request(`/api/v1${path}`, {
       method,

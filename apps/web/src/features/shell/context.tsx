@@ -1,4 +1,4 @@
-import type { Me, Workspace } from "@tracker/shared";
+import type { Me, Workspace } from "@glasstrack/shared";
 import { createContext, useContext } from "react";
 
 export interface WsContext {

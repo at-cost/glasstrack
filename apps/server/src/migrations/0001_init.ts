@@ -4,10 +4,10 @@ import { type Kysely, sql } from "kysely";
  * Core schema for Milestone 1.
  *
  * Tenant tables carry workspace_id and are protected by row-level security:
- * - tracker_app (HTTP requests) sees only rows of app.workspace_id, a
+ * - glasstrack_app (HTTP requests) sees only rows of app.workspace_id, a
  *   transaction-local setting written by app.enter_workspace() after a
  *   membership check.
- * - tracker_system (jobs, auth) has an explicit allow-all policy instead of
+ * - glasstrack_system (jobs, auth) has an explicit allow-all policy instead of
  *   BYPASSRLS, so the same setup works on managed Postgres such as RDS.
  */
 
@@ -344,14 +344,14 @@ CREATE INDEX ON exports (workspace_id, created_at DESC);
       .raw(`
 ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ${t} FORCE ROW LEVEL SECURITY;
-CREATE POLICY system_all ON ${t} TO tracker_system USING (true) WITH CHECK (true);
+CREATE POLICY system_all ON ${t} TO glasstrack_system USING (true) WITH CHECK (true);
 `)
       .execute(db);
   }
   for (const t of TENANT_TABLES.filter((t) => t !== "workspace_members")) {
     await sql
       .raw(`
-CREATE POLICY tenant ON ${t} TO tracker_app
+CREATE POLICY tenant ON ${t} TO glasstrack_app
   USING (workspace_id = app.ws()) WITH CHECK (workspace_id = app.ws());
 `)
       .execute(db);
@@ -359,47 +359,47 @@ CREATE POLICY tenant ON ${t} TO tracker_app
 
   await sql`
 -- A user may list their own memberships across workspaces; everything else is per workspace.
-CREATE POLICY tenant_read ON workspace_members FOR SELECT TO tracker_app
+CREATE POLICY tenant_read ON workspace_members FOR SELECT TO glasstrack_app
   USING (workspace_id = app.ws() OR user_id = app.uid());
-CREATE POLICY tenant_insert ON workspace_members FOR INSERT TO tracker_app WITH CHECK (workspace_id = app.ws());
-CREATE POLICY tenant_update ON workspace_members FOR UPDATE TO tracker_app
+CREATE POLICY tenant_insert ON workspace_members FOR INSERT TO glasstrack_app WITH CHECK (workspace_id = app.ws());
+CREATE POLICY tenant_update ON workspace_members FOR UPDATE TO glasstrack_app
   USING (workspace_id = app.ws()) WITH CHECK (workspace_id = app.ws());
-CREATE POLICY tenant_delete ON workspace_members FOR DELETE TO tracker_app USING (workspace_id = app.ws());
+CREATE POLICY tenant_delete ON workspace_members FOR DELETE TO glasstrack_app USING (workspace_id = app.ws());
 
 ALTER TABLE workspaces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workspaces FORCE ROW LEVEL SECURITY;
-CREATE POLICY system_all ON workspaces TO tracker_system USING (true) WITH CHECK (true);
-CREATE POLICY member_read ON workspaces FOR SELECT TO tracker_app
+CREATE POLICY system_all ON workspaces TO glasstrack_system USING (true) WITH CHECK (true);
+CREATE POLICY member_read ON workspaces FOR SELECT TO glasstrack_app
   USING (id IN (SELECT workspace_id FROM workspace_members WHERE user_id = app.uid()));
-CREATE POLICY current_update ON workspaces FOR UPDATE TO tracker_app
+CREATE POLICY current_update ON workspaces FOR UPDATE TO glasstrack_app
   USING (id = app.ws()) WITH CHECK (id = app.ws());
 
 -- Users are visible to themselves and to members of the current workspace.
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users FORCE ROW LEVEL SECURITY;
-CREATE POLICY system_all ON users TO tracker_system USING (true) WITH CHECK (true);
-CREATE POLICY visible ON users FOR SELECT TO tracker_app USING (
+CREATE POLICY system_all ON users TO glasstrack_system USING (true) WITH CHECK (true);
+CREATE POLICY visible ON users FOR SELECT TO glasstrack_app USING (
   id = app.uid()
   OR id IN (SELECT user_id FROM workspace_members WHERE workspace_id = app.ws())
 );
-CREATE POLICY self_update ON users FOR UPDATE TO tracker_app USING (id = app.uid()) WITH CHECK (id = app.uid());
+CREATE POLICY self_update ON users FOR UPDATE TO glasstrack_app USING (id = app.uid()) WITH CHECK (id = app.uid());
 
 -- Grants
-GRANT USAGE ON SCHEMA public, app TO tracker_app, tracker_system;
-GRANT CREATE ON SCHEMA app TO tracker_system;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO tracker_system;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO tracker_app, tracker_system;
+GRANT USAGE ON SCHEMA public, app TO glasstrack_app, glasstrack_system;
+GRANT CREATE ON SCHEMA app TO glasstrack_system;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO glasstrack_system;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO glasstrack_app, glasstrack_system;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   workspace_members, invites, teams, team_key_aliases, team_members, workflow_states, labels, cycles,
   issues, issue_labels, issue_relations, issue_subscribers, comments, attachments, saved_views,
   notifications, notification_settings, exports
-  TO tracker_app;
-GRANT SELECT, INSERT ON activity TO tracker_app;
-GRANT SELECT ON workspaces, users TO tracker_app;
-GRANT UPDATE (name) ON workspaces TO tracker_app;
-GRANT UPDATE (name, avatar_url) ON users TO tracker_app;
+  TO glasstrack_app;
+GRANT SELECT, INSERT ON activity TO glasstrack_app;
+GRANT SELECT ON workspaces, users TO glasstrack_app;
+GRANT UPDATE (name) ON workspaces TO glasstrack_app;
+GRANT UPDATE (name, avatar_url) ON users TO glasstrack_app;
 
--- Membership-checked entry into a workspace. Runs as tracker_system so it can
+-- Membership-checked entry into a workspace. Runs as glasstrack_system so it can
 -- resolve the slug before app.workspace_id is set.
 CREATE FUNCTION app.enter_workspace(p_slug text)
 RETURNS TABLE (id uuid, slug text, name text, status text, role text)
@@ -416,9 +416,9 @@ BEGIN
   PERFORM set_config('app.workspace_id', v_ws.id::text, true);
   RETURN QUERY SELECT v_ws.id, v_ws.slug::text, v_ws.name, v_ws.status, v_role;
 END $$;
-ALTER FUNCTION app.enter_workspace(text) OWNER TO tracker_system;
+ALTER FUNCTION app.enter_workspace(text) OWNER TO glasstrack_system;
 REVOKE ALL ON FUNCTION app.enter_workspace(text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION app.enter_workspace(text) TO tracker_app;
+GRANT EXECUTE ON FUNCTION app.enter_workspace(text) TO glasstrack_app;
 
 -- Activity is append-only for everyone but whole-workspace deletion.
 CREATE FUNCTION app.reject_change() RETURNS trigger LANGUAGE plpgsql AS $$

@@ -1,5 +1,5 @@
 import type pg from "pg";
-import type { RealtimeEvent } from "@tracker/shared";
+import type { RealtimeEvent } from "@glasstrack/shared";
 import { logger } from "../lib/logger";
 
 type Listener = (e: RealtimeEvent) => void;

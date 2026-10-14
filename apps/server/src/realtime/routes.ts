@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import type { RealtimeEvent } from "@tracker/shared";
+import type { RealtimeEvent } from "@glasstrack/shared";
 import { type AppEnv, requireUser } from "../context";
 import { enterWorkspace } from "../db/tenant";
 

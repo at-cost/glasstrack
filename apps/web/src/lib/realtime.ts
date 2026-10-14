@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import type { RealtimeEvent } from "@tracker/shared";
+import type { RealtimeEvent } from "@glasstrack/shared";
 import { useEffect } from "react";
 import { invalidateFor } from "./queries";
 

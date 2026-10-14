@@ -2,7 +2,7 @@ import { generateCodeVerifier, generateState, GitHub, Google } from "arctic";
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
-import { emailSchema } from "@tracker/shared";
+import { emailSchema } from "@glasstrack/shared";
 import type { AppEnv, Ctx, Deps } from "../context";
 import type { Db } from "../db";
 import { layout } from "../email";
@@ -75,7 +75,7 @@ function providers(deps: Deps) {
 
 async function fetchJson<T>(url: string, token: string): Promise<T> {
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "tracker" },
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "glasstrack" },
   });
   if (!res.ok) throw new Error(`OAuth profile fetch failed: ${res.status}`);
   return (await res.json()) as T;

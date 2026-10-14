@@ -1,5 +1,5 @@
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Issue, IssueDetail } from "@tracker/shared";
+import type { Issue, IssueDetail } from "@glasstrack/shared";
 import { Dialog } from "../../components/Dialog";
 import { Spinner } from "../../components/Feedback";
 import { OptionList } from "../../components/Picker";

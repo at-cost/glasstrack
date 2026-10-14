@@ -1,5 +1,5 @@
 {
-  "name": "@tracker/server",
+  "name": "@glasstrack/server",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
-    "@tracker/shared": "workspace:*",
+    "@glasstrack/shared": "workspace:*",
     "arctic": "^3.7.0",
     "aws4fetch": "^1.0.20",
     "hono": "^4.13.13",

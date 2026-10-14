@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import type { Cycle } from "@tracker/shared";
+import type { Cycle } from "@glasstrack/shared";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ConfirmDialog, Dialog } from "../../components/Dialog";

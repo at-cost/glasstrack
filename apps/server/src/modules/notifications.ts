@@ -6,7 +6,7 @@ import {
   type NotificationKind,
   type NotificationSettings,
   notificationSettingsSchema,
-} from "@tracker/shared";
+} from "@glasstrack/shared";
 import { type AppEnv, requireUser } from "../context";
 
 export const DEFAULT_EVENTS = Object.fromEntries(NOTIFICATION_KINDS.map((k) => [k, true])) as Record<NotificationKind, boolean>;

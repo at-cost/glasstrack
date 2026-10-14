@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { type Comment, commentSchema } from "@tracker/shared";
+import { type Comment, commentSchema } from "@glasstrack/shared";
 import { type AppEnv, requireRole, requireUser } from "../context";
 import { notify } from "../db/tenant";
 import { forbidden, notFound } from "../lib/errors";

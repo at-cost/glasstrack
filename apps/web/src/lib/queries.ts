@@ -1,5 +1,5 @@
 import { type QueryClient, queryOptions, useQuery } from "@tanstack/react-query";
-import type { IssueFilter } from "@tracker/shared";
+import type { IssueFilter } from "@glasstrack/shared";
 import { api } from "./api";
 
 export type ListFilter = IssueFilter & { order?: string };

@@ -9,7 +9,7 @@ const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const READ_ONLY_ALLOWED = [/\/exports$/, /\/notifications\/read$/];
 
 /**
- * Wraps every /w/:slug request in one transaction as tracker_app with the
+ * Wraps every /w/:slug request in one transaction as glasstrack_app with the
  * workspace entered through the membership-checking SQL function. Any error
  * (including HTTP 4xx thrown by handlers) rolls the transaction back.
  */

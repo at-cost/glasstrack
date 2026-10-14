@@ -1,4 +1,4 @@
-import { PRIORITY_LABELS, type Priority } from "@tracker/shared";
+import { PRIORITY_LABELS, type Priority } from "@glasstrack/shared";
 import { Calendar, Tag } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Dialog } from "../../components/Dialog";

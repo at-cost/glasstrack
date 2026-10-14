@@ -1,8 +1,6 @@
-# Tracker
+# Glasstrack
 
-An open-source ticket tracker for software teams: issues, boards, cycles, keyboard-first, real-time. MIT licensed.
-
-*Tracker is a working name until the product is named.*
+An open-source ticket tracker for software teams: issues, boards, cycles, keyboard-first, real-time. MIT licensed. Run by the numbers, in the open: [glasstrack.dev](https://glasstrack.dev)
 
 ![Board view](docs/screenshots/board-light.png)
 
@@ -36,14 +34,14 @@ An open-source ticket tracker for software teams: issues, boards, cycles, keyboa
 You need Docker with the compose plugin.
 
 ```sh
-git clone https://github.com/transparent-ai-businesses/tracker.git && cd tracker
+git clone https://github.com/transparent-ai-businesses/glasstrack.git && cd glasstrack
 sh scripts/init-env.sh          # creates .env with random secrets; set APP_URL and SMTP_URL
 docker compose up -d            # app on http://localhost:3000
 ```
 
 That runs the app and Postgres. Files are stored on a local volume.
 
-- **HTTPS:** set `DOMAIN=tracker.example.com` and `APP_URL=https://tracker.example.com` in `.env`, then `docker compose --profile tls up -d`. Caddy gets a certificate automatically.
+- **HTTPS:** set `DOMAIN=glasstrack.example.com` and `APP_URL=https://glasstrack.example.com` in `.env`, then `docker compose --profile tls up -d`. Caddy gets a certificate automatically.
 - **Managed Postgres (RDS, Neon, Hetzner, anything 15+):** set `DATABASE_URL` in `.env`.
 - **S3 storage (AWS S3, MinIO, R2, Hetzner):** set `STORAGE_DRIVER=s3` and the `S3_*` variables.
 - **Email:** any SMTP server, including AWS SES via its SMTP endpoint.
@@ -60,7 +58,7 @@ Every option is documented in [`.env.example`](.env.example). Moving from AWS to
 
   ```sh
   docker compose exec app node dist/restore-verify.js
-  # cron example: 30 4 * * * cd /srv/tracker && docker compose exec -T app node dist/restore-verify.js || <alert command>
+  # cron example: 30 4 * * * cd /srv/glasstrack && docker compose exec -T app node dist/restore-verify.js || <alert command>
   ```
 
   One-off backup: `docker compose exec app node dist/backup.js`.

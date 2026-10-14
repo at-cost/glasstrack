@@ -13,7 +13,7 @@ import {
   type StateCategory,
   type Team,
   type WorkflowState,
-} from "@tracker/shared";
+} from "@glasstrack/shared";
 import { ArrowDown, ArrowUp, Copy, Download, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog, Dialog } from "../../components/Dialog";

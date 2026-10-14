@@ -5,7 +5,7 @@ import { type Client, createHarness, type Harness, setupWorkspace } from "./harn
 /**
  * Tenant isolation. Two workspaces with data in every tenant table; a member
  * of A must never read, change or create anything in B, through the API or
- * directly as the tracker_app database role.
+ * directly as the glasstrack_app database role.
  */
 
 let h: Harness;
@@ -59,24 +59,24 @@ afterAll(async () => {
 });
 
 describe("schema guarantees", () => {
-  it("every table with workspace_id has RLS enabled, forced, and a tracker_app policy", async () => {
+  it("every table with workspace_id has RLS enabled, forced, and a glasstrack_app policy", async () => {
     const tables = (await TENANT_TABLES_SQL.execute(h.deps.dbs.owner)).rows.map((r) => r.tableName);
     expect(tables.length).toBeGreaterThan(15);
     const rows = await sql<{ relname: string; rls: boolean; force: boolean; policies: string[] }>`
       SELECT c.relname, c.relrowsecurity AS rls, c.relforcerowsecurity AS force,
         coalesce((SELECT array_agg(p.polname) FROM pg_policy p WHERE p.polrelid = c.oid
-          AND 'tracker_app'::regrole = ANY(p.polroles)), '{}') AS policies
+          AND 'glasstrack_app'::regrole = ANY(p.polroles)), '{}') AS policies
       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public' AND c.relname = ANY(${tables})`.execute(h.deps.dbs.owner);
     for (const r of rows.rows) {
       expect({ table: r.relname, rls: r.rls, force: r.force }).toEqual({ table: r.relname, rls: true, force: true });
-      expect(r.policies.length, `${r.relname} has no tracker_app policy`).toBeGreaterThan(0);
+      expect(r.policies.length, `${r.relname} has no glasstrack_app policy`).toBeGreaterThan(0);
     }
   });
 
-  it("tracker_app cannot bypass RLS and is not a superuser", async () => {
+  it("glasstrack_app cannot bypass RLS and is not a superuser", async () => {
     const r = await sql<{ rolsuper: boolean; rolbypassrls: boolean }>`
-      SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'tracker_app'`.execute(h.deps.dbs.owner);
+      SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'glasstrack_app'`.execute(h.deps.dbs.owner);
     expect(r.rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
   });
 });
@@ -133,7 +133,7 @@ describe("API isolation", () => {
   });
 });
 
-describe("database-level isolation as tracker_app", () => {
+describe("database-level isolation as glasstrack_app", () => {
   it("with workspace A entered, no tenant table returns B rows and writes to B fail", async () => {
     const tables = (await TENANT_TABLES_SQL.execute(h.deps.dbs.owner)).rows.map((r) => r.tableName);
     const alice = await a.c.ok("GET", "/api/v1/me");

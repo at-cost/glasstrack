@@ -16,10 +16,10 @@ Requirements: Node 22+, pnpm 10, PostgreSQL 15+ running locally.
 
 ```sh
 pnpm install
-createdb tracker_dev && createdb tracker_test
+createdb glasstrack_dev && createdb glasstrack_test
 cp .env.example .env && sh scripts/init-env.sh   # or edit .env by hand
 # For local dev set in .env:
-#   DATABASE_URL=postgres://<you>@localhost:5432/tracker_dev
+#   DATABASE_URL=postgres://<you>@localhost:5432/glasstrack_dev
 #   APP_URL=http://localhost:5180  PORT=3100  E2E_TEST_LOGIN=true
 pnpm migrate
 pnpm seed            # demo workspace, sign in as demo@example.com
@@ -33,7 +33,7 @@ Without `SMTP_URL`, sign-in links are printed in the server log.
 ```sh
 pnpm lint
 pnpm typecheck
-pnpm test            # uses TEST_DATABASE_URL or postgres://localhost:5432/tracker_test
+pnpm test            # uses TEST_DATABASE_URL or postgres://localhost:5432/glasstrack_test
 pnpm test:e2e        # Playwright; builds nothing, run `pnpm build` first
 ```
 
@@ -42,7 +42,7 @@ The integration tests drop and recreate the test database schema, run every migr
 ## Database changes
 
 - Add a numbered file in `apps/server/src/migrations/` with `up` and `down`, and register it in `migrations/index.ts`.
-- New tenant table: add `workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE`, enable and force RLS, add the `tenant` (tracker_app) and `system_all` (tracker_system) policies, and grant privileges. Copy the pattern in `0001_init.ts`.
+- New tenant table: add `workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE`, enable and force RLS, add the `tenant` (glasstrack_app) and `system_all` (glasstrack_system) policies, and grant privileges. Copy the pattern in `0001_init.ts`.
 - Request handlers use `c.get("trx")`, which is already scoped to the workspace. Use `deps.dbs.system` only for cross-workspace jobs and pre-sign-in auth.
 
 ## Commits and PRs

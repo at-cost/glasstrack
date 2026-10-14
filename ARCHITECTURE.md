@@ -1,6 +1,6 @@
 # Architecture
 
-Working name: **Tracker** (placeholder until a product name is chosen).
+**Glasstrack** ([glasstrack.dev](https://glasstrack.dev)).
 
 An open-source, MIT-licensed ticket tracker that anyone can self-host with every feature, and that is also run as a hosted multi-tenant service priced at cost with public finances. Because price equals cost, efficiency is a feature: the whole system must run for hundreds of teams on one 2 vCPU / 4 GB server.
 
@@ -88,8 +88,8 @@ pnpm workspaces. The cost-allocation, ledger and pricing maths live in `packages
 | Role | Purpose | RLS |
 |---|---|---|
 | owner (the `DATABASE_URL` user) | Owns all tables, runs migrations, creates the two runtime roles on boot. Used at runtime only by pg-boss. | n/a |
-| `tracker_app` | Every HTTP request. `NOBYPASSRLS`. | Enforced |
-| `tracker_system` | Cross-workspace jobs (digests, deletion, cleanup, later metering) and pre-sign-in auth lookups. | Explicit allow-all policy (`system_all`), not `BYPASSRLS`, so it works on RDS |
+| `glasstrack_app` | Every HTTP request. `NOBYPASSRLS`. | Enforced |
+| `glasstrack_system` | Cross-workspace jobs (digests, deletion, cleanup, later metering) and pre-sign-in auth lookups. | Explicit allow-all policy (`system_all`), not `BYPASSRLS`, so it works on RDS |
 
 ### Request flow
 
@@ -116,11 +116,11 @@ Exceptions:
 - `workspace_members`: also readable where `user_id = app.user_id` (so a user can list their own workspaces).
 - `workspaces`: readable where the user is a member.
 
-A test queries `pg_catalog` and fails if any table with a `workspace_id` column lacks `relrowsecurity`, `relforcerowsecurity` and a `tracker_app` policy. Role checks (admin/member/guest) and guest team scoping are enforced in the application layer; RLS is the tenant wall.
+A test queries `pg_catalog` and fails if any table with a `workspace_id` column lacks `relrowsecurity`, `relforcerowsecurity` and a `glasstrack_app` policy. Role checks (admin/member/guest) and guest team scoping are enforced in the application layer; RLS is the tenant wall.
 
 ### Isolation tests
 
-`apps/server/test/rls.test.ts` creates workspaces A and B with rows in every tenant table (it asserts that), then as a member of A tries every API route of B, B's issue ids and keys inside A, cross-workspace references (labels, parents, assignees, relations), search and listings, and, directly as `tracker_app`, selects, updates and inserts against B in every tenant table. It also checks the workspace setting never leaks between pooled connections.
+`apps/server/test/rls.test.ts` creates workspaces A and B with rows in every tenant table (it asserts that), then as a member of A tries every API route of B, B's issue ids and keys inside A, cross-workspace references (labels, parents, assignees, relations), search and listings, and, directly as `glasstrack_app`, selects, updates and inserts against B in every tenant table. It also checks the workspace setting never leaks between pooled connections.
 
 ---
 
@@ -293,7 +293,7 @@ Public `/finances` page: daily roll-up into `finance_daily`, history charts, CSV
 ## 8. Operations
 
 - `docker compose up`: services `app` and `postgres` (plus optional profiles `minio` and `mailpit` for local S3/email testing). Self-host default storage is the local disk volume, so MinIO is not required.
-- Migrations run on container start (`MIGRATE_ON_BOOT=true`) using `tracker_owner`, before the HTTP server listens. Every migration has a `down`; CI runs up, down, up.
+- Migrations run on container start (`MIGRATE_ON_BOOT=true`) using `glasstrack_owner`, before the HTTP server listens. Every migration has a `down`; CI runs up, down, up.
 - Backups: a pg-boss cron job runs `pg_dump -Fc` and uploads to `s3://<bucket>/backups/` (or the local volume). `scripts/restore-verify.sh` restores the latest dump into a scratch database, runs migrations-are-current and row-count sanity checks, then drops it. Docs show cron and systemd timer examples.
 - Portability: nothing AWS-specific is required. S3 endpoint, SMTP host and `DATABASE_URL` are env vars; moving to Hetzner is a config change.
 
@@ -311,12 +311,12 @@ Public `/finances` page: daily roll-up into `finance_daily`, history charts, CSV
 8. **Full-text search quality**: Postgres FTS is good enough for titles and descriptions but lacks typo tolerance. `pg_trgm` can be added later without new infrastructure.
 9. **Email deliverability**: magic-link login depends on it. SES with SPF/DKIM/DMARC set up is part of the deploy guide.
 10. **Clean-room**: no code, icons or visual style copied from Linear, Plane or Jira. Plane is AGPL, so its code must not be read for implementation detail. Original colour palette and layout.
-11. **Product name** (Decision 3): needed before public launch, domain purchase and README.
+11. ~~**Product name** (Decision 3)~~ Resolved: Glasstrack, glasstrack.dev (DNS on Cloudflare).
 
 ## 10. As built (Milestone 1)
 
 - Exports are a streamed `.tar.gz` (workspace.json, issues.csv, comments.csv, attachments/), not a zip: streaming tar has no 4 GB limit and needs no dependency. CSV cells starting with `= + - @` are prefixed to stop formula injection.
 - The server ships as one tsup bundle, so the runtime Docker image has no `node_modules` (node:22-alpine + pg client tools + ~3.5 MB of JS).
 - Background jobs: pg-boss queues `export.workspace`, `workspace.delete`, `notifications.digest` (every 15 min, honours hourly/daily per user), `maintenance.cleanup` (hourly) and `backup.run` (cron, when `BACKUP_ENABLED`). Jobs are enqueued after the request transaction commits.
-- Backups: `node dist/backup.js` or the scheduled job writes `backups/tracker-<timestamp>.dump`; `node dist/restore-verify.js` restores the newest into a scratch database, runs sanity checks and drops it (exit code 1 on failure, for cron alerts).
+- Backups: `node dist/backup.js` or the scheduled job writes `backups/glasstrack-<timestamp>.dump`; `node dist/restore-verify.js` restores the newest into a scratch database, runs sanity checks and drops it (exit code 1 on failure, for cron alerts).
 - Docker was not available on the build machine, so the image and `docker compose up` are verified in CI (the `docker` job boots the stack and checks `/ready`), not locally.

@@ -1,4 +1,4 @@
-import type { IssueFilter, Priority } from "@tracker/shared";
+import type { IssueFilter, Priority } from "@glasstrack/shared";
 
 /** Filter fields kept in the URL. Lists are comma separated. */
 export interface FilterSearch {

@@ -1,4 +1,4 @@
-import type { RealtimeEvent } from "@tracker/shared";
+import type { RealtimeEvent } from "@glasstrack/shared";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { createHarness, type Harness, setupWorkspace } from "./harness";
 

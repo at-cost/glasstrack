@@ -7,7 +7,7 @@ import {
   PRIORITY_LABELS,
   type Priority,
   type WorkflowState,
-} from "@tracker/shared";
+} from "@glasstrack/shared";
 import { Avatar, LabelDot, PriorityIcon, StatusIcon } from "../../components/icons";
 import type { Option } from "../../components/Picker";
 import type { IssuePatch } from "../../lib/api";

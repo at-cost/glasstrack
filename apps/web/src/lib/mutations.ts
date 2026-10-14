@@ -1,5 +1,5 @@
 import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Issue, IssueDetail, Priority } from "@tracker/shared";
+import type { Issue, IssueDetail, Priority } from "@glasstrack/shared";
 import { api, errorMessage, type IssueCreate, type IssuePatch } from "./api";
 import { keys, type ListFilter } from "./queries";
 import { toastError } from "./toast";

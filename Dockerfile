@@ -9,7 +9,7 @@ COPY packages/shared/package.json packages/shared/
 RUN pnpm install --frozen-lockfile
 COPY apps ./apps
 COPY packages ./packages
-RUN pnpm --filter @tracker/web build && pnpm --filter @tracker/server build
+RUN pnpm --filter @glasstrack/web build && pnpm --filter @glasstrack/server build
 
 # Runtime: the server is a self-contained bundle, so no node_modules ship.
 FROM node:22-alpine

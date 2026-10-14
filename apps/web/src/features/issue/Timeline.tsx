@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type Activity, type Comment, type IssueDetail, type Member, PRIORITY_LABELS, type Priority } from "@tracker/shared";
+import { type Activity, type Comment, type IssueDetail, type Member, PRIORITY_LABELS, type Priority } from "@glasstrack/shared";
 import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ConfirmDialog } from "../../components/Dialog";

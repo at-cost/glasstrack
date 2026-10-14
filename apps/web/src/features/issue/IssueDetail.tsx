@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import type { IssueDetail, IssueRelation } from "@tracker/shared";
+import type { IssueDetail, IssueRelation } from "@glasstrack/shared";
 import { Archive, Bell, BellOff, ChevronRight, Copy, Ellipsis, FileText, Link2, Paperclip, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "../../components/Dialog";

@@ -1,5 +1,5 @@
 import { type Transaction, sql } from "kysely";
-import type { Role } from "@tracker/shared";
+import type { Role } from "@glasstrack/shared";
 import { notFound } from "../lib/errors";
 import type { Db } from "./index";
 import type { DB } from "./schema";
@@ -14,7 +14,7 @@ export interface WorkspaceCtx {
   role: Role;
 }
 
-/** Runs fn in a transaction as tracker_app with only the user context set. */
+/** Runs fn in a transaction as glasstrack_app with only the user context set. */
 export async function asUser<T>(app: Db, userId: string, fn: (trx: Tx) => Promise<T>): Promise<T> {
   return app.transaction().execute(async (trx) => {
     await sql`SELECT set_config('app.user_id', ${userId}, true)`.execute(trx);

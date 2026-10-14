@@ -4,7 +4,7 @@ import type { AppEnv, Ctx, Deps } from "../context";
 import { newToken, sha256, uuid7 } from "../lib/ids";
 
 const SESSION_DAYS = 30;
-export const cookieName = (deps: Deps) => (deps.config.secureCookies ? "__Host-tracker_session" : "tracker_session");
+export const cookieName = (deps: Deps) => (deps.config.secureCookies ? "__Host-glasstrack_session" : "glasstrack_session");
 
 export async function createSession(c: Ctx, userId: string): Promise<void> {
   const deps = c.get("deps");

@@ -28,9 +28,9 @@ export async function restoreVerify(config: Config, storage: Storage): Promise<{
   const keys = (await storage.list("backups/")).filter((k) => k.endsWith(".dump"));
   const key = keys.at(-1);
   if (!key) throw new Error("No backups found under backups/");
-  const dir = await mkdtemp(path.join(tmpdir(), "tracker-restore-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "glasstrack-restore-"));
   const file = path.join(dir, "latest.dump");
-  const scratch = `tracker_restore_check_${Date.now()}`;
+  const scratch = `glasstrack_restore_check_${Date.now()}`;
   const admin = new pg.Client({ connectionString: config.DATABASE_URL });
   await admin.connect();
   const scratchUrl = new URL(config.DATABASE_URL);

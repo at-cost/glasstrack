@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import type { IssueFilter, Team } from "@tracker/shared";
+import type { IssueFilter, Team } from "@glasstrack/shared";
 import { Columns3, ListTodo, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { ConfirmDialog } from "../../components/Dialog";

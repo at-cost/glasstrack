@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { sql } from "kysely";
-import { type Attachment, attachmentRequestSchema } from "@tracker/shared";
+import { type Attachment, attachmentRequestSchema } from "@glasstrack/shared";
 import { type AppEnv, type Ctx, requireRole, requireUser } from "../context";
 import { notify } from "../db/tenant";
 import { badRequest, notFound } from "../lib/errors";

@@ -4,7 +4,7 @@ const PORT = 3300;
 export const E2E = {
   url: `http://localhost:${PORT}`,
   mailFile: "test-results/e2e-mail.jsonl",
-  databaseUrl: process.env.E2E_DATABASE_URL ?? "postgres://localhost:5432/tracker_e2e",
+  databaseUrl: process.env.E2E_DATABASE_URL ?? "postgres://localhost:5432/glasstrack_e2e",
 };
 
 /** Runs the production build (apps/server/dist + apps/web/dist). Run `pnpm build` first. */

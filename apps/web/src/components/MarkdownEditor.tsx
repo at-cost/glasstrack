@@ -1,4 +1,4 @@
-import type { Member } from "@tracker/shared";
+import type { Member } from "@glasstrack/shared";
 import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { renderMarkdown } from "../lib/markdown";
 import { Avatar } from "./icons";

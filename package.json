@@ -1,5 +1,5 @@
 {
-  "name": "tracker",
+  "name": "glasstrack",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -15,8 +15,8 @@
     "format": "biome format --write .",
     "test": "pnpm -r test",
     "test:e2e": "playwright test",
-    "migrate": "pnpm --filter @tracker/server migrate",
-    "seed": "pnpm --filter @tracker/server seed"
+    "migrate": "pnpm --filter @glasstrack/server migrate",
+    "seed": "pnpm --filter @glasstrack/server seed"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",

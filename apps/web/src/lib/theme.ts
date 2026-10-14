@@ -1,7 +1,7 @@
 import { createStore, useStore } from "./store";
 
 export type ThemeChoice = "system" | "light" | "dark";
-const KEY = "tracker-theme";
+const KEY = "glasstrack-theme";
 
 function read(): ThemeChoice {
   try {

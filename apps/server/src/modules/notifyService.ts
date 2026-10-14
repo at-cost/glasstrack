@@ -1,5 +1,5 @@
 import { sql } from "kysely";
-import { extractMentions, type NotificationKind } from "@tracker/shared";
+import { extractMentions, type NotificationKind } from "@glasstrack/shared";
 import { notify, type Tx } from "../db/tenant";
 import { uuid7 } from "../lib/ids";
 

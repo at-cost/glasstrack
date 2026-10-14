@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import type { Role } from "@tracker/shared";
+import type { Role } from "@glasstrack/shared";
 import type { Config } from "./config";
 import type { Databases } from "./db";
 import type { Tx, WorkspaceCtx } from "./db/tenant";

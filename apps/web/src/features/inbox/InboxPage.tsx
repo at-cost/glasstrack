@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import type { Notification } from "@tracker/shared";
+import type { Notification } from "@glasstrack/shared";
 import { CheckCheck, Settings } from "lucide-react";
 import { Empty, Skeleton } from "../../components/Feedback";
 import { Avatar } from "../../components/icons";

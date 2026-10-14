@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import type { Team } from "@tracker/shared";
+import type { Team } from "@glasstrack/shared";
 import { useEffect, useRef } from "react";
 import { Dialog } from "../../components/Dialog";
 import { Kbd } from "../../components/icons";

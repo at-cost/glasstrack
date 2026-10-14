@@ -11,7 +11,7 @@ import {
   mentionHandle,
   updateMemberSchema,
   updateWorkspaceSchema,
-} from "@tracker/shared";
+} from "@glasstrack/shared";
 import { type AppEnv, requireRole, requireUser } from "../context";
 import type { Db } from "../db";
 import { asUser, notify, type Tx } from "../db/tenant";

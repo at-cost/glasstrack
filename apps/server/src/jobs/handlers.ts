@@ -25,13 +25,13 @@ export async function exportWorkspace(deps: Deps, { exportId, workspaceId }: Job
     logger.warn({ exportId }, "export row not found");
     return;
   }
-  const dir = await mkdtemp(path.join(tmpdir(), "tracker-export-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "glasstrack-export-"));
   const file = path.join(dir, "export.tar.gz");
   try {
     const data = await asWorkspace(app, workspaceId, async (trx) => {
       const workspace = await system.selectFrom("workspaces").select(["id", "slug", "name", "createdAt"]).where("id", "=", workspaceId).executeTakeFirstOrThrow();
       return {
-        format: "tracker-export",
+        format: "glasstrack-export",
         version: 1,
         exportedAt: new Date().toISOString(),
         workspace,

@@ -11,9 +11,9 @@ import { logger } from "../lib/logger";
  * window are pruned by name, which embeds the date.
  */
 export async function runBackup(deps: Deps): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), "tracker-backup-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "glasstrack-backup-"));
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const file = path.join(dir, `tracker-${stamp}.dump`);
+  const file = path.join(dir, `glasstrack-${stamp}.dump`);
   try {
     await new Promise<void>((resolve, reject) => {
       const p = spawn("pg_dump", ["--format=custom", "--no-owner", "--file", file, deps.config.DATABASE_URL], {
@@ -25,7 +25,7 @@ export async function runBackup(deps: Deps): Promise<string> {
       p.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`pg_dump exited ${code}: ${err}`))));
     });
     const size = (await stat(file)).size;
-    const key = `backups/tracker-${stamp}.dump`;
+    const key = `backups/glasstrack-${stamp}.dump`;
     await deps.storage.put(key, { path: file, size }, "application/octet-stream");
     logger.info({ key, size }, "backup uploaded");
     return key;

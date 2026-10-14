@@ -19,7 +19,7 @@ import type {
   Team,
   Workspace,
   WorkflowState,
-} from "@tracker/shared";
+} from "@glasstrack/shared";
 import { setReadOnly } from "./store";
 
 export class ApiError extends Error {

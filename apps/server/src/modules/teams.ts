@@ -14,7 +14,7 @@ import {
   updateStateSchema,
   updateTeamSchema,
   type WorkflowState,
-} from "@tracker/shared";
+} from "@glasstrack/shared";
 import { type AppEnv, type Ctx, requireRole, requireUser } from "../context";
 import { notify, type Tx } from "../db/tenant";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors";

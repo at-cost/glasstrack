@@ -1,5 +1,5 @@
-import type { Member, Priority, StateCategory, WorkflowState } from "@tracker/shared";
-import { PRIORITY_LABELS } from "@tracker/shared";
+import type { Member, Priority, StateCategory, WorkflowState } from "@glasstrack/shared";
+import { PRIORITY_LABELS } from "@glasstrack/shared";
 import { hueOf, initials } from "../lib/format";
 
 /** Status mark: ring for not started, half for started, filled with a tick for done, slash for canceled. */

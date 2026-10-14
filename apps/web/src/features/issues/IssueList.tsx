@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { type Issue, type Label, type Member, STATE_CATEGORIES, type WorkflowState } from "@tracker/shared";
+import { type Issue, type Label, type Member, STATE_CATEGORIES, type WorkflowState } from "@glasstrack/shared";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Avatar, LabelDot, PriorityIcon, StatusIcon } from "../../components/icons";

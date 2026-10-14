@@ -11,7 +11,7 @@ export const paths = {
   settings: (slug: string) => `/${slug}/settings`,
 };
 
-const LAST_WS = "tracker-last-ws";
+const LAST_WS = "glasstrack-last-ws";
 export function rememberWorkspace(slug: string) {
   try {
     localStorage.setItem(LAST_WS, slug);

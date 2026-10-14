@@ -1,5 +1,5 @@
 import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
-import { type IssueFilter, PRIORITY_LABELS, type Priority, STATE_CATEGORIES } from "@tracker/shared";
+import { type IssueFilter, PRIORITY_LABELS, type Priority, STATE_CATEGORIES } from "@glasstrack/shared";
 import { ChevronDown, Save, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "../../components/Dialog";

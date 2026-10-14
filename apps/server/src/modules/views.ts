@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { type IssueFilter, type SavedView, savedViewSchema, updateSavedViewSchema } from "@tracker/shared";
+import { type IssueFilter, type SavedView, savedViewSchema, updateSavedViewSchema } from "@glasstrack/shared";
 import { type AppEnv, requireRole, requireUser } from "../context";
 import { notify } from "../db/tenant";
 import { notFound } from "../lib/errors";

@@ -23,7 +23,7 @@ const schema = z.object({
   WEB_DIST_DIR: z.string().default(""),
 
   SMTP_URL: z.string().default(""),
-  EMAIL_FROM: z.string().default("Tracker <no-reply@localhost>"),
+  EMAIL_FROM: z.string().default("Glasstrack <no-reply@localhost>"),
 
   STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
   STORAGE_LOCAL_DIR: z.string().default("./data/files"),

@@ -16,7 +16,7 @@ import {
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useNavigate } from "@tanstack/react-router";
-import { type Issue, keyBetween, type Label, type Member, type WorkflowState } from "@tracker/shared";
+import { type Issue, keyBetween, type Label, type Member, type WorkflowState } from "@glasstrack/shared";
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Avatar, LabelDot, PriorityIcon, StatusIcon } from "../../components/icons";
