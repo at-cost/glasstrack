@@ -24,6 +24,10 @@ An open-source ticket tracker for software teams: issues, boards, cycles, keyboa
 - One-click export of a whole workspace (JSON, CSV and attachments), and full workspace deletion
 - Sign in with an email link, Google or GitHub
 - Dark and light themes, keyboard navigable, works on phones
+- REST API with personal tokens, signed outgoing webhooks ([docs/API.md](docs/API.md))
+- Import from Linear, Jira and Trello
+- GitHub: link pull requests by issue key, move issues to Done on merge
+- Hosted mode: prepaid credit, daily pro-rata charges, Stripe top-ups, and a public finances page with every cost line
 
 | | |
 |---|---|

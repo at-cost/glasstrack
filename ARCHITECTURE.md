@@ -320,3 +320,31 @@ Public `/finances` page: daily roll-up into `finance_daily`, history charts, CSV
 - Background jobs: pg-boss queues `export.workspace`, `workspace.delete`, `notifications.digest` (every 15 min, honours hourly/daily per user), `maintenance.cleanup` (hourly) and `backup.run` (cron, when `BACKUP_ENABLED`). Jobs are enqueued after the request transaction commits.
 - Backups: `node dist/backup.js` or the scheduled job writes `backups/glasstrack-<timestamp>.dump`; `node dist/restore-verify.js` restores the newest into a scratch database, runs sanity checks and drops it (exit code 1 on failure, for cron alerts).
 - Docker was not available on the build machine, so the image and `docker compose up` are verified in CI (the `docker` job boots the stack and checks `/ready`), not locally.
+
+## 11. As built (Milestones 2 to 4)
+
+**Billing (hosted mode only, `BILLING_ENABLED=true`).**
+- Prices are USD. The Stripe account may settle in another currency; fees are read from the balance transaction and converted back to USD with its exchange rate.
+- `credit_ledger` and `pricing_config` are append-only by trigger. A second trigger rejects any price above the current one, so "the price only goes down" holds even against a bug or a manual SQL insert.
+- The daily job (00:10 UTC) charges each day since the last charge (catching up at most 31 days), adds storage overage, then moves the workspace between active, grace and read-only. Read-only workspaces are not charged, so debt never grows while nobody can use the workspace.
+- Top-ups go through Stripe Checkout. With "save card", the payment method is stored for off-session automatic top-ups (at most one a day; a decline turns automatic top-up off and emails the admins).
+- Webhooks are verified, recorded by event id, and every ledger write has a unique key, so duplicates and retries can't double credit.
+- Starter credit: one per verified email (stored as a hash), at most `BILLING_STARTER_DOMAIN_LIMIT` per company domain per 30 days; public mail domains are limited per address only.
+- Ledger and payment rows have no foreign key to workspaces and stay (without personal data) after deletion; the billing account with the Stripe customer id is deleted.
+
+**Finances (Milestone 3).**
+- API requests and emails are counted in memory per workspace and flushed to `usage_daily` every minute. A daily job snapshots active members (active in the last 30 days) and storage.
+- Costs: manual entries (spread evenly over their period), AWS Cost Explorer by service (optional, upserted because AWS revises recent days), and Stripe fees from `payments`.
+- Storage and email costs are carved out of the operating bill and charged to workspaces by usage; the rest is shared by active members (see `allocateCosts`, property-tested to sum exactly).
+- Revenue is recognised when charges consume credit beyond the workspace's starter grant (starter credit is spent first and reported separately as "starter credit used", not revenue).
+- Reserve = all recognised revenue minus all costs. "Paying workspaces" = workspaces with recognised revenue in the last 30 days.
+- `finance_daily` is the only public table. The public JSON and CSV are aggregates only; a test checks no workspace id, slug, name or email appears.
+- Operators (`OPERATOR_EMAILS`) can enter costs, recompute days and lower the price.
+
+**Integrations (Milestone 4).**
+- Personal API tokens (`gt_...`, stored hashed) act as their owner in one workspace and can't manage tokens, webhooks or integrations.
+- Webhooks are queued after commit, signed `t=..,v1=HMAC(t.body)`, retried 5 times with backoff and switched off after 20 consecutive failures. Hosted servers refuse private-network destinations, checked when saved and again at delivery (DNS rebinding).
+- Importers parse Linear CSV, Jira CSV (repeated Labels and Comment columns) and Trello JSON into one shape and write it inside the workspace transaction (RLS applies).
+- GitHub uses a per-workspace webhook URL and secret instead of a GitHub App, so there is nothing to register. Keys in a PR's title, body or branch link it; a merge moves the issue to the team's first completed status.
+
+See [docs/API.md](docs/API.md) for the public API.
