@@ -51,9 +51,7 @@ export function createApp(deps: Deps) {
     }
   });
 
-  app.use(
-    "*",
-    secureHeaders({
+  const headers = secureHeaders({
       contentSecurityPolicy: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
@@ -65,8 +63,9 @@ export function createApp(deps: Deps) {
         baseUri: ["'self'"],
       },
       crossOriginEmbedderPolicy: false,
-    }),
-  );
+  });
+  // File downloads set their own stricter sandbox policy.
+  app.use("*", (c, next) => (c.req.path.startsWith("/api/v1/files/") ? next() : headers(c, next)));
 
   const api = new Hono<AppEnv>();
   // Origin check on every state-changing request (CSRF). Cookies are SameSite=Lax too.
