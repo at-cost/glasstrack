@@ -89,7 +89,15 @@ export interface IssueRelation {
   direction: "outgoing" | "incoming";
   issue: Pick<Issue, "id" | "identifier" | "title" | "statusId">;
 }
+export interface IssueLink {
+  id: string;
+  provider: "github";
+  url: string;
+  title: string;
+  state: "open" | "closed" | "merged";
+}
 export interface IssueDetail extends Issue {
+  links: IssueLink[];
   children: Pick<Issue, "id" | "identifier" | "title" | "statusId" | "assigneeId">[];
   relations: IssueRelation[];
   attachments: Attachment[];

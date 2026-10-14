@@ -22,6 +22,8 @@ export const workspaceTx: MiddlewareHandler<AppEnv> = async (c, next) => {
   await deps.dbs.app.transaction().execute(async (trx) => {
     const ws = await enterWorkspace(trx, user.id, slug);
     if (ws.status === "deleting") throw notFound("Workspace not found");
+    const tokenWs = c.get("tokenWorkspaceId");
+    if (tokenWs && tokenWs !== ws.id) throw notFound("Workspace not found");
     if (
       ws.status === "read_only" &&
       MUTATING.has(c.req.method) &&

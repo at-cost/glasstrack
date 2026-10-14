@@ -198,6 +198,7 @@ export async function cleanup(deps: Deps) {
   const expired = await sys.selectFrom("exports").select(["id", "storageKey"]).where("expiresAt", "<", new Date()).limit(1000).execute();
   for (const e of expired) if (e.storageKey) await deps.storage.delete(e.storageKey).catch(() => undefined);
   if (expired.length) await sys.deleteFrom("exports").where("id", "in", expired.map((e) => e.id)).execute();
+  await sys.deleteFrom("webhookDeliveries").where("createdAt", "<", new Date(Date.now() - 14 * 86_400_000)).execute();
 }
 
 export type Handlers = { [N in JobName]: (deps: Deps, data: JobPayloads[N]) => Promise<void> };
@@ -223,6 +224,10 @@ export const handlers: Handlers = {
     await deps.meter.flush(deps.dbs.system);
     const { runDailyFinances } = await import("../finances/service");
     await runDailyFinances(deps);
+  },
+  "webhook.deliver": async (deps, { deliveryId }) => {
+    const { deliverWebhook } = await import("../modules/webhooks");
+    await deliverWebhook(deps, deliveryId);
   },
   "backup.run": async (deps) => {
     const { runBackup } = await import("./backup");

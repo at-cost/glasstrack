@@ -12,7 +12,11 @@ export async function createBossJobs(config: Config): Promise<Jobs & { boss: PgB
   const boss = new PgBoss({ connectionString: config.DATABASE_URL, schema: "pgboss", max: 3 });
   boss.on("error", (err) => logger.error({ err }, "pg-boss error"));
   await boss.start();
-  for (const q of QUEUES) await boss.createQueue(q, { retryLimit: 3, retryDelay: 30, retryBackoff: true });
+  for (const q of QUEUES) {
+    // Webhooks retry 5 times with backoff (about 30s, 1m, 2m, 4m, 8m).
+    const retryLimit = q === "webhook.deliver" ? 4 : 3;
+    await boss.createQueue(q, { retryLimit, retryDelay: 30, retryBackoff: true });
+  }
   return {
     boss,
     async send(name, data) {

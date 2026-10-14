@@ -2,6 +2,7 @@ import { sql } from "kysely";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runDailyBilling } from "../src/billing/service";
 import { runDailyFinances } from "../src/finances/service";
+import { createHmac } from "node:crypto";
 import { type Client, createHarness, type Harness, setupWorkspace } from "./harness";
 
 /**
@@ -41,7 +42,7 @@ async function fillWorkspace(w: { c: Client; slug: string; team: { id: string } 
 }
 
 beforeAll(async () => {
-  h = await createHarness({ BILLING_ENABLED: "true" });
+  h = await createHarness({ BILLING_ENABLED: "true", WEBHOOK_ALLOW_PRIVATE: "true" });
   await h.reset();
   a = await setupWorkspace(h, "alice@a.example", "alpha");
   b = await setupWorkspace(h, "bob@b.example", "bravo");
@@ -65,6 +66,17 @@ beforeAll(async () => {
   await h.app.request("/api/v1/stripe/webhook", { method: "POST", headers: { "stripe-signature": ev.signature, "content-type": "application/json" }, body: ev.body });
   await runDailyBilling(h.deps);
   await runDailyFinances(h.deps, new Date(Date.now() + 86_400_000));
+  // Integration rows for B: token, webhook + delivery, GitHub link.
+  await b.c.ok("POST", "/api/v1/w/bravo/tokens", { name: "ci" });
+  await b.c.ok("POST", "/api/v1/w/bravo/webhooks", { url: "http://127.0.0.1:9/hook", events: ["comment.created"] });
+  await b.c.ok("POST", `/api/v1/w/bravo/issues/${bIssue.id}/comments`, { body: "triggers a delivery" });
+  const gh = await b.c.ok("PUT", "/api/v1/w/bravo/integrations/github", {});
+  const prBody = JSON.stringify({ action: "opened", pull_request: { html_url: "https://github.com/b/b/pull/1", number: 1, title: `Fix ${bIssue.identifier}`, body: "", state: "open", merged: false } });
+  await h.app.request(`/api/v1/github/webhook/${bWorkspaceId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-github-event": "pull_request", "x-hub-signature-256": `sha256=${createHmac("sha256", gh.secret).update(prBody).digest("hex")}` },
+    body: prBody,
+  });
 });
 
 afterAll(async () => {

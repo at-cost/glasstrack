@@ -6,10 +6,15 @@ import { secureHeaders } from "hono/secure-headers";
 import { sql } from "kysely";
 import { ZodError } from "zod";
 import { authRoutes } from "./auth/routes";
+import { importRoutes } from "./importers/run";
+import { githubSettingsRoutes, githubWebhookRoutes } from "./modules/github";
 import { adminRoutes, publicFinanceRoutes } from "./finances/routes";
 import { billingRoutes } from "./billing/routes";
 import { stripeWebhookRoutes } from "./billing/webhook";
 import { sessionMiddleware } from "./auth/session";
+import { bearerMiddleware } from "./auth/tokens";
+import { tokenRoutes } from "./modules/tokens";
+import { webhookRoutes } from "./modules/webhooks";
 import type { AppEnv, Deps } from "./context";
 import { ApiError } from "./lib/errors";
 import { logger } from "./lib/logger";
@@ -73,7 +78,12 @@ export function createApp(deps: Deps) {
   const api = new Hono<AppEnv>();
   // Origin check on every state-changing request (CSRF). Cookies are SameSite=Lax too.
   api.use(csrf({ origin }));
-  api.use(sessionMiddleware);
+  api.use(async (c, next) => {
+    // A bearer token replaces the cookie session entirely.
+    if (c.req.header("authorization")?.startsWith("Bearer ")) return bearerMiddleware(c, next);
+    c.set("tokenWorkspaceId", null);
+    return sessionMiddleware(c, next);
+  });
   api.use(async (c, next) => {
     const user = c.get("user");
     const key = user ? `u:${user.id}` : `ip:${c.req.header("x-forwarded-for")?.split(",").pop()?.trim() ?? "local"}`;
@@ -87,13 +97,15 @@ export function createApp(deps: Deps) {
   api.use("*", async (c, next) => {
     // Files are streamed with their own limit; JSON bodies stay small.
     if (c.req.path.startsWith("/api/v1/files/")) return next();
-    return bodyLimit({ maxSize: 1024 * 1024 })(c, next);
+    const maxSize = c.req.path.endsWith("/import") ? 26 * 1024 * 1024 : 1024 * 1024;
+    return bodyLimit({ maxSize })(c, next);
   });
 
   api.route("/auth", authRoutes);
   api.route("/stripe", stripeWebhookRoutes);
   api.route("/public", publicFinanceRoutes);
   api.route("/admin", adminRoutes);
+  api.route("/github", githubWebhookRoutes);
   api.route("/files", fileRoutes);
   api.route("/", workspaceRootRoutes);
   api.route("/w/:slug", realtimeRoutes);
@@ -108,6 +120,10 @@ export function createApp(deps: Deps) {
   ws.route("/", notificationRoutes);
   ws.route("/", exportRoutes);
   ws.route("/", billingRoutes);
+  ws.route("/", tokenRoutes);
+  ws.route("/", webhookRoutes);
+  ws.route("/", importRoutes);
+  ws.route("/", githubSettingsRoutes);
   api.route("/w/:slug", ws);
   api.all("*", (c) => c.json({ error: { code: "not_found", message: "Not found" } }, 404));
   app.route("/api/v1", api);

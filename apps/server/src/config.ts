@@ -64,6 +64,8 @@ const schema = z.object({
   BACKUP_RETAIN_DAYS: z.coerce.number().int().default(14),
   /** Allow the test-only login endpoint. Never enable in production. */
   E2E_TEST_LOGIN: bool.default(false),
+  /** Allow webhooks to private network addresses (self-hosted LANs). Off for hosted. */
+  WEBHOOK_ALLOW_PRIVATE: bool.default(false),
 });
 
 export type Config = z.infer<typeof schema> & {

@@ -344,6 +344,61 @@ export interface FinanceDailyTable {
   computedAt: TsDefault;
 }
 
+export interface ApiTokensTable {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  name: string;
+  tokenHash: string;
+  tokenPrefix: string;
+  createdAt: TsDefault;
+  lastUsedAt: Ts | null;
+  expiresAt: Ts | null;
+  revokedAt: Ts | null;
+}
+export interface WebhooksTable {
+  id: string;
+  workspaceId: string;
+  url: string;
+  secret: string;
+  events: string[];
+  active: Generated<boolean>;
+  consecutiveFailures: Generated<number>;
+  createdBy: string | null;
+  createdAt: TsDefault;
+}
+export interface WebhookDeliveriesTable {
+  id: string;
+  workspaceId: string;
+  webhookId: string;
+  event: string;
+  payload: Json<Record<string, unknown>>;
+  status: Generated<"pending" | "succeeded" | "failed">;
+  attempts: Generated<number>;
+  responseStatus: number | null;
+  error: string | null;
+  createdAt: TsDefault;
+  deliveredAt: Ts | null;
+}
+export interface IssueLinksTable {
+  id: string;
+  workspaceId: string;
+  issueId: string;
+  provider: "github";
+  url: string;
+  title: string;
+  state: "open" | "closed" | "merged";
+  createdAt: TsDefault;
+  updatedAt: TsDefault;
+}
+export interface GithubIntegrationsTable {
+  workspaceId: string;
+  secret: string;
+  moveOnMerge: Generated<boolean>;
+  createdBy: string | null;
+  createdAt: TsDefault;
+}
+
 export interface DB {
   users: UsersTable;
   authIdentities: AuthIdentitiesTable;
@@ -379,6 +434,11 @@ export interface DB {
   workspaceCostDaily: WorkspaceCostDailyTable;
   costEntries: CostEntriesTable;
   financeDaily: FinanceDailyTable;
+  apiTokens: ApiTokensTable;
+  webhooks: WebhooksTable;
+  webhookDeliveries: WebhookDeliveriesTable;
+  issueLinks: IssueLinksTable;
+  githubIntegrations: GithubIntegrationsTable;
 }
 
 export type UserRow = Selectable<UsersTable>;

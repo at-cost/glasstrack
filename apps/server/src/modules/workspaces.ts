@@ -18,7 +18,6 @@ import { asUser, notify, type Tx } from "../db/tenant";
 import { layout } from "../email";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../lib/errors";
 import { newToken, sha256, uuid7 } from "../lib/ids";
-import { workspaceTx } from "./workspaceTx";
 
 const INVITE_DAYS = 7;
 
@@ -158,7 +157,6 @@ export const workspaceRootRoutes = new Hono<AppEnv>()
 
 /** Routes inside /w/:slug */
 export const workspaceRoutes = new Hono<AppEnv>()
-  .use(workspaceTx)
   .get("/", (c) => c.json(c.get("ws")))
   .patch("/", async (c) => {
     requireRole(c, "admin");

@@ -40,6 +40,8 @@ export type AppEnv = {
     ws: WorkspaceCtx;
     /** Callbacks run after the request transaction commits (e.g. enqueue jobs). */
     afterCommit: (() => Promise<unknown>)[];
+    /** Set when the request authenticated with an API token: the only workspace it may use. */
+    tokenWorkspaceId: string | null;
   };
 };
 export type Ctx = Context<AppEnv>;

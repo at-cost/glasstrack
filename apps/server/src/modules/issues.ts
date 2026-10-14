@@ -20,6 +20,7 @@ import { notify, type Tx } from "../db/tenant";
 import { badRequest, conflict, notFound } from "../lib/errors";
 import { isUuid, uuid7 } from "../lib/ids";
 import { attachmentsFor } from "./attachments";
+import { queueWebhooks } from "./webhooks";
 import { createNotifications, resolveMentions, subscribe, subscribersOf } from "./notifyService";
 import { assertTeamAccess, visibleTeamIds } from "./teams";
 
@@ -255,8 +256,10 @@ export async function detail(c: Ctx, issue: Issue): Promise<IssueDetail> {
   });
   const sub = await trx.selectFrom("issueSubscribers").select("userId").where("issueId", "=", issue.id)
     .where("userId", "=", user.id).executeTakeFirst();
+  const links = await trx.selectFrom("issueLinks").select(["id", "provider", "url", "title", "state"]).where("issueId", "=", issue.id).orderBy("createdAt").execute();
   return {
     ...issue,
+    links,
     children: children.map((ch) => ({ id: ch.id, identifier: `${ch.key}-${ch.number}`, title: ch.title, statusId: ch.statusId, assigneeId: ch.assigneeId })),
     relations: [...outgoing.map(rel("outgoing")), ...incoming.map(rel("incoming"))],
     attachments: await attachmentsFor(c, issue.id),
@@ -331,7 +334,9 @@ export const issueRoutes = new Hono<AppEnv>()
     }
     await createNotifications(trx, { workspaceId: ws.id, issueId: id, actorId: user.id, kind: "mentioned", userIds: mentioned });
     await notify(trx, ws.id, { t: "issue", id });
-    return c.json(await findIssue(c, id), 201);
+    const created = await findIssue(c, id);
+    queueWebhooks(c, "issue.created", { issue: created });
+    return c.json(created, 201);
   })
 
   .get("/issues/:ref", async (c) => c.json(await detail(c, await findIssue(c, c.req.param("ref")))))
@@ -404,8 +409,12 @@ export const issueRoutes = new Hono<AppEnv>()
       await subscribe(trx, ws.id, cur.id, fresh);
       await createNotifications(trx, { workspaceId: ws.id, issueId: cur.id, actorId: user.id, kind: "mentioned", userIds: fresh });
     }
-    if (acts.length) await notify(trx, ws.id, { t: "issue", id: cur.id });
-    return c.json(await findIssue(c, cur.id));
+    const updated = await findIssue(c, cur.id);
+    if (acts.length) {
+      await notify(trx, ws.id, { t: "issue", id: cur.id });
+      queueWebhooks(c, "issue.updated", { issue: updated, changes: acts.map(([kind, data]) => ({ field: kind, ...data })) });
+    }
+    return c.json(updated);
   })
 
   .post("/issues/:ref/move", async (c) => {
@@ -452,7 +461,9 @@ export const issueRoutes = new Hono<AppEnv>()
       });
     }
     await notify(trx, ws.id, { t: "issue", id: cur.id });
-    return c.json(await findIssue(c, cur.id));
+    const moved = await findIssue(c, cur.id);
+    if (set.statusId) queueWebhooks(c, "issue.updated", { issue: moved, changes: [{ field: "status", from: cur.statusId, to: statusId }] });
+    return c.json(moved);
   })
 
   .post("/issues/:ref/archive", async (c) => {
@@ -463,7 +474,9 @@ export const issueRoutes = new Hono<AppEnv>()
     await trx.updateTable("issues").set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() }).where("id", "=", cur.id).execute();
     await recordActivity(trx, c.get("ws").id, cur.id, user.id, archived ? "archived" : "unarchived");
     await notify(trx, c.get("ws").id, { t: "issue", id: cur.id });
-    return c.json(await findIssue(c, cur.id));
+    const out = await findIssue(c, cur.id);
+    queueWebhooks(c, "issue.updated", { issue: out, changes: [{ field: archived ? "archived" : "unarchived" }] });
+    return c.json(out);
   })
 
   .delete("/issues/:ref", async (c) => {
@@ -476,6 +489,7 @@ export const issueRoutes = new Hono<AppEnv>()
     const storage = c.get("deps").storage;
     for (const f of files) await storage.delete(f.storageKey).catch(() => undefined);
     await notify(trx, c.get("ws").id, { t: "issue", id: cur.id });
+    queueWebhooks(c, "issue.deleted", { issue: { id: cur.id, identifier: cur.identifier, title: cur.title } });
     return c.json({ ok: true });
   })
 
