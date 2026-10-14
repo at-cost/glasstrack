@@ -103,7 +103,157 @@ export type IssueCreate = {
 };
 export type IssuePatch = Partial<Omit<IssueCreate, "teamId">>;
 
+export interface LedgerEntry {
+  id: string;
+  kind: "starter_grant" | "topup" | "charge" | "storage_charge" | "refund" | "adjustment" | string;
+  amountMicro: number;
+  memo: string | null;
+  /** Day a daily charge covers (YYYY-MM-DD); null for other entries. */
+  day: string | null;
+  createdAt: string;
+}
+export interface PaymentRow {
+  id: string;
+  kind: "topup" | "auto_topup" | string;
+  amountMicro: number;
+  feeMicro: number | null;
+  status: string;
+  createdAt: string;
+}
+export type Billing =
+  | { enabled: false }
+  | {
+      enabled: true;
+      status: "active" | "grace" | "read_only" | "deleting";
+      balanceMicro: number;
+      monthlyPriceMicro: number;
+      dailyChargeMicro: number;
+      daysRemaining: number | null;
+      storage: { bytes: number; freeBytes: number; overageDailyMicro: number; ratePerGbMonthMicro: number };
+      card: string | null;
+      graceStartedAt: string | null;
+      autoTopup: { enabled: boolean; thresholdMicro: number; amountMicro: number };
+      limits: { minTopupMicro: number; maxTopupMicro: number };
+      ledger: LedgerEntry[];
+      payments: PaymentRow[];
+    };
+export type BillingOn = Extract<Billing, { enabled: true }>;
+
+export interface ApiToken {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+}
+
+export const WEBHOOK_EVENTS = ["issue.created", "issue.updated", "issue.deleted", "comment.created"] as const;
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+export interface Webhook {
+  id: string;
+  url: string;
+  events: WebhookEvent[];
+  active: boolean;
+  consecutiveFailures?: number;
+  createdAt?: string;
+  secret: string;
+}
+export interface WebhookDelivery {
+  id: string;
+  event: string;
+  status: "pending" | "succeeded" | "failed" | string;
+  attempts: number;
+  responseStatus: number | null;
+  error: string | null;
+  createdAt: string;
+  deliveredAt: string | null;
+}
+
+export type ImportSource = "linear" | "jira" | "trello";
+export interface ImportSummary {
+  issues: number;
+  comments: number;
+  labelsCreated: string[];
+  statusesCreated: string[];
+  unmatchedAssignees: string[];
+  dryRun: boolean;
+}
+
+export interface GithubIntegration {
+  enabled: boolean;
+  webhookUrl: string;
+  secret?: string;
+  moveOnMerge?: boolean;
+}
+
+export interface FinanceDay {
+  day: string;
+  revenueMicro: number;
+  starterCreditUsedMicro: number;
+  costs: Record<string, number>;
+  paymentFeesMicro: number;
+  totalCostMicro: number;
+  activeWorkspaces: number;
+  payingWorkspaces: number;
+  costPerWorkspaceMicro: number;
+  reserveMicro: number;
+  reserveTargetMicro: number;
+  priceMicro: number;
+  recommendedPriceMicro: number | null;
+  marginBp: number;
+}
+export interface PublicFinances {
+  currency: string;
+  currentPriceMicro: number;
+  latest: FinanceDay | null;
+  formula: { allocation: string; price: string };
+  priceHistory: { from: string; monthlyPriceMicro: number; reason: string }[];
+  history: FinanceDay[];
+}
+export type CostCategory = "infrastructure" | "email" | "storage" | "domain" | "tools" | "ai" | "other";
+export interface CostEntry {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  category: CostCategory;
+  source: "aws" | "manual";
+  amountMicro: number;
+  publicLabel: string;
+  note: string | null;
+  createdAt: string;
+}
+export interface CostInput {
+  periodStart: string;
+  periodEnd: string;
+  category: CostCategory;
+  amountUsd: number;
+  publicLabel?: string;
+  note?: string;
+}
+export interface AdminOverview {
+  currentPriceMicro: number;
+  latest: FinanceDay | null;
+  canLower: boolean;
+  awsConfigured: boolean;
+  categories: Record<string, string>;
+  costs: CostEntry[];
+  pricing: { id: string | number; effectiveFrom: string; monthlyPriceMicro: number; reason: string; createdBy: string | null }[];
+  history: FinanceDay[];
+}
+
 export const api = {
+  publicFinances: (days = 365) => get<PublicFinances>(`/public/finances?days=${days}`),
+  admin: {
+    me: () => get<{ operator: boolean }>("/admin/me"),
+    overview: () => get<AdminOverview>("/admin/overview"),
+    addCost: (b: CostInput) => post<{ id: string }>("/admin/costs", b),
+    updateCost: (id: string, b: CostInput) => patch<{ ok: true }>(`/admin/costs/${id}`, b),
+    deleteCost: (id: string) => del<{ ok: true }>(`/admin/costs/${id}`),
+    recompute: (from: string, to?: string) => post<{ days: number }>("/admin/finances/recompute", { from, to }),
+    lowerPrice: (monthlyUsd: number, reason: string) => post<{ monthlyPriceMicro: number }>("/admin/pricing/lower", { monthlyUsd, reason }),
+  },
+
   providers: () => get<{ google: boolean; github: boolean; magicLink: boolean }>("/auth/providers"),
   magicLink: (email: string, redirectTo?: string) => post<{ ok: true }>("/auth/magic-link", { email, redirectTo }),
   verifyMagicLink: (token: string) => post<{ redirectTo: string }>("/auth/magic-link/verify", { token }),
@@ -202,6 +352,28 @@ export const api = {
       exports: () => get<ExportJob[]>(`${w}/exports`),
       startExport: () => post<ExportJob>(`${w}/exports`),
       exportJob: (id: string) => get<ExportJob>(`${w}/exports/${id}`),
+
+      billing: () => get<Billing>(`${w}/billing`),
+      topup: (amountUsd: number, saveCard: boolean) => post<{ url: string }>(`${w}/billing/topup`, { amountUsd, saveCard }),
+      autoTopup: (b: { enabled: boolean; thresholdUsd: number; amountUsd: number }) => put<{ ok: true }>(`${w}/billing/auto-topup`, b),
+
+      tokens: () => get<ApiToken[]>(`${w}/tokens`),
+      createToken: (name: string, expiresInDays: number | null) =>
+        post<{ id: string; name: string; token: string; expiresAt: string | null }>(`${w}/tokens`, { name, expiresInDays }),
+      revokeToken: (id: string) => del<{ ok: true }>(`${w}/tokens/${id}`),
+
+      webhooks: () => get<Webhook[]>(`${w}/webhooks`),
+      createWebhook: (b: { url: string; events: WebhookEvent[]; active: boolean }) => post<Webhook>(`${w}/webhooks`, b),
+      updateWebhook: (id: string, b: Partial<{ url: string; events: WebhookEvent[]; active: boolean }>) =>
+        patch<{ ok: true }>(`${w}/webhooks/${id}`, b),
+      deleteWebhook: (id: string) => del<{ ok: true }>(`${w}/webhooks/${id}`),
+      deliveries: (id: string) => get<WebhookDelivery[]>(`${w}/webhooks/${id}/deliveries`),
+
+      runImport: (b: { source: ImportSource; teamId: string; content: string; dryRun: boolean }) => post<ImportSummary>(`${w}/import`, b),
+
+      github: () => get<GithubIntegration>(`${w}/integrations/github`),
+      saveGithub: (b: { moveOnMerge: boolean; rotateSecret?: boolean }) => put<GithubIntegration>(`${w}/integrations/github`, b),
+      disableGithub: () => del<{ ok: true }>(`${w}/integrations/github`),
     };
   },
 };

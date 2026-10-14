@@ -25,10 +25,26 @@ export const keys = {
   invites: (slug: string) => ["invites", slug] as const,
   exports: (slug: string) => ["exports", slug] as const,
   teamMembers: (slug: string, teamId: string) => ["team-members", slug, teamId] as const,
+  billing: (slug: string) => ["billing", slug] as const,
+  tokens: (slug: string) => ["tokens", slug] as const,
+  webhooks: (slug: string) => ["webhooks", slug] as const,
+  deliveries: (slug: string, id: string) => ["deliveries", slug, id] as const,
+  github: (slug: string) => ["github", slug] as const,
+  operator: ["operator"] as const,
+  adminOverview: ["admin-overview"] as const,
+  publicFinances: ["public-finances"] as const,
 };
 
 export const meQuery = queryOptions({ queryKey: keys.me, queryFn: api.me, staleTime: 60_000, retry: false });
 export const useMe = () => useQuery(meQuery);
+
+/** Billing summary. `enabled: false` on self-hosted servers. */
+export const useBilling = (slug: string) =>
+  useQuery({ queryKey: keys.billing(slug), queryFn: () => api.ws(slug).billing(), staleTime: 60_000, retry: false });
+
+/** Whether the signed-in user is a server operator (hosted mode only). */
+export const useOperator = () =>
+  useQuery({ queryKey: keys.operator, queryFn: () => api.admin.me(), staleTime: 5 * 60_000, retry: false });
 
 export const useWorkspace = (slug: string) => useQuery({ queryKey: keys.ws(slug), queryFn: () => api.ws(slug).get(), retry: false });
 export const useMembers = (slug: string) =>

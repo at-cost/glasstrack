@@ -7,6 +7,8 @@ import {
   CircleUser,
   Columns3,
   Inbox,
+  Landmark,
+  ShieldCheck,
   Layers,
   ListTodo,
   LogOut,
@@ -26,7 +28,7 @@ import { FullPageLoading } from "../../components/Feedback";
 import { Popover } from "../../components/Picker";
 import { ApiError, api, errorMessage } from "../../lib/api";
 import { lastWorkspace, paths, rememberWorkspace } from "../../lib/paths";
-import { keys, useMe, useTeams, useUnreadCount, useViews, useWorkspace } from "../../lib/queries";
+import { keys, useBilling, useMe, useOperator, useTeams, useUnreadCount, useViews, useWorkspace } from "../../lib/queries";
 import { useRealtime } from "../../lib/realtime";
 import { setReadOnly, ui, useReadOnly, useUi } from "../../lib/store";
 import { effectiveTheme, toggleTheme, useTheme } from "../../lib/theme";
@@ -34,7 +36,7 @@ import { CreateIssueDialog } from "../issue/CreateIssueDialog";
 import { QuickPicker } from "../issue/QuickPicker";
 import { CommandPalette } from "../palette/CommandPalette";
 import { ShortcutsHelp, useGlobalShortcuts } from "../palette/shortcuts";
-import { type WsContext, WorkspaceCtx } from "./context";
+import { type WsContext, WorkspaceCtx, useWs } from "./context";
 
 export function WorkspaceLayout() {
   const { slug } = useParams({ strict: false }) as { slug: string };
@@ -127,11 +129,7 @@ function Shell() {
             <Search size={18} />
           </button>
         </div>
-        {readOnly && (
-          <div className="banner" role="status">
-            This workspace is read-only. You can view and export everything, but changes are turned off.
-          </div>
-        )}
+        {readOnly && <ReadOnlyBanner />}
         <main id="main" className="main" tabIndex={-1}>
           <Outlet />
         </main>
@@ -140,6 +138,25 @@ function Shell() {
       {state.paletteOpen && <CommandPalette onClose={ui.closePalette} />}
       {state.helpOpen && <ShortcutsHelp onClose={ui.closeHelp} />}
       {state.picker && <QuickPicker kind={state.picker.kind} issueRef={state.picker.issueRef} onClose={ui.closePicker} />}
+    </div>
+  );
+}
+
+function ReadOnlyBanner() {
+  const { slug, isAdmin } = useWs();
+  const billing = useBilling(slug);
+  return (
+    <div className="banner" role="status">
+      This workspace is read-only. You can view and export everything, but changes are turned off.
+      {billing.data?.enabled &&
+        (isAdmin ? (
+          <>
+            {" "}
+            <Link to={paths.settings(slug, "billing")}>Add credit to turn editing back on</Link>.
+          </>
+        ) : (
+          " An admin can add credit to turn editing back on."
+        ))}
     </div>
   );
 }
@@ -184,6 +201,7 @@ function Sidebar() {
   const teams = useTeams(slug);
   const views = useViews(slug);
   const unread = useUnreadCount(slug);
+  const billing = useBilling(slug);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const themeChoice = useTheme();
   const dark = effectiveTheme(themeChoice) === "dark";
@@ -277,6 +295,11 @@ function Sidebar() {
         <NavLink to={paths.settings(slug)} icon={<Settings size={16} />}>
           Settings
         </NavLink>
+        {billing.data?.enabled && (
+          <NavLink to={paths.finances()} icon={<Landmark size={16} />}>
+            Public finances
+          </NavLink>
+        )}
         <div className="sidebar-bottom-row">
           <UserMenu name={me.name} email={me.email} />
           <button
@@ -394,6 +417,7 @@ function UserMenu({ name, email }: { name: string; email: string }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { slug } = useParams({ strict: false }) as { slug: string };
+  const operator = useOperator();
   const signOut = async () => {
     try {
       await api.logout();
@@ -425,8 +449,11 @@ function UserMenu({ name, email }: { name: string; email: string }) {
                 id: "profile",
                 label: "Profile",
                 icon: <CircleUser size={14} />,
-                onSelect: () => navigate({ to: paths.settings(slug), search: { tab: "profile" } }),
+                onSelect: () => navigate({ to: paths.settings(slug, "profile") }),
               },
+              ...(operator.data?.operator
+                ? [{ id: "admin", label: "Operator admin", icon: <ShieldCheck size={14} />, onSelect: () => navigate({ to: paths.admin() }) }]
+                : []),
               { id: "out", label: "Sign out", icon: <LogOut size={14} />, onSelect: signOut },
             ]}
             onClose={() => setOpen(false)}

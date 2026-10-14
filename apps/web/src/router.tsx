@@ -1,7 +1,9 @@
 import { createRootRoute, createRoute, createRouter, Link, Outlet } from "@tanstack/react-router";
 import { Toaster } from "./components/Feedback";
 import { IndexPage, InvitePage, LoginPage, NewWorkspacePage, VerifyPage } from "./features/auth/pages";
+import { AdminPage } from "./features/admin/AdminPage";
 import { CyclesPage } from "./features/cycles/CyclesPage";
+import { FinancesPage } from "./features/finances/FinancesPage";
 import { InboxPage } from "./features/inbox/InboxPage";
 import { IssueDetailPage } from "./features/issue/IssueDetail";
 import { MyIssuesPage, TeamBacklogPage, TeamBoardPage, TeamIssuesPage, ViewPage } from "./features/issues/pages";
@@ -37,6 +39,8 @@ const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", com
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: "/login", component: LoginPage });
 const verifyRoute = createRoute({ getParentRoute: () => rootRoute, path: "/auth/verify", component: VerifyPage });
 const inviteRoute = createRoute({ getParentRoute: () => rootRoute, path: "/invite/$token", component: InvitePage });
+const financesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/finances", component: FinancesPage });
+const adminRoute = createRoute({ getParentRoute: () => rootRoute, path: "/admin", component: AdminPage });
 const newWsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/new", component: NewWorkspacePage });
 
 const wsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/$slug", component: WorkspaceLayout });
@@ -48,6 +52,8 @@ const routeTree = rootRoute.addChildren([
   verifyRoute,
   inviteRoute,
   newWsRoute,
+  financesRoute,
+  adminRoute,
   wsRoute.addChildren([
     child("/", WorkspaceIndex),
     child("inbox", InboxPage),
@@ -59,6 +65,7 @@ const routeTree = rootRoute.addChildren([
     child("view/$viewId", ViewPage),
     child("issue/$identifier", IssueDetailPage),
     child("settings", SettingsPage),
+    child("settings/$tab", SettingsPage),
   ]),
 ]);
 

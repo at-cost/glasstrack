@@ -21,7 +21,7 @@ export const billingRoutes = new Hono<AppEnv>()
       balanceMicro(trx, ws.id),
       storageBytes(trx, ws.id),
       trx.selectFrom("billingAccounts").selectAll().where("workspaceId", "=", ws.id).executeTakeFirst(),
-      trx.selectFrom("creditLedger").select(["id", "kind", "amountMicro", "memo", "createdAt"]).orderBy("id", "desc").limit(100).execute(),
+      trx.selectFrom("creditLedger").select(["id", "kind", "amountMicro", "memo", "refType", "refId", "createdAt"]).orderBy("createdAt", "desc").orderBy("id", "desc").limit(100).execute(),
       trx.selectFrom("payments").select(["id", "kind", "amountMicro", "feeMicro", "status", "createdAt"]).orderBy("createdAt", "desc").limit(20).execute(),
     ]);
     const overage = storageOverageDaily(bytes, deps.config.BILLING_FREE_STORAGE_GB, usdToMicro(deps.config.BILLING_STORAGE_USD_PER_GB_MONTH));
@@ -42,7 +42,8 @@ export const billingRoutes = new Hono<AppEnv>()
         amountMicro: n(acct?.autoTopupAmountMicro),
       },
       limits: { minTopupMicro: usdToMicro(deps.config.BILLING_MIN_TOPUP_USD), maxTopupMicro: usdToMicro(deps.config.BILLING_MAX_TOPUP_USD) },
-      ledger: ledger.map((l) => ({ id: l.id, kind: l.kind, amountMicro: n(l.amountMicro), memo: l.memo, createdAt: l.createdAt.toISOString() })),
+      // Charges are shown on the day they cover, which differs from createdAt after a catch-up run.
+      ledger: ledger.map((l) => ({ id: l.id, kind: l.kind, amountMicro: n(l.amountMicro), memo: l.memo, day: l.refType === "day" ? l.refId : null, createdAt: l.createdAt.toISOString() })),
       payments: payments.map((p) => ({ id: p.id, kind: p.kind, amountMicro: n(p.amountMicro), feeMicro: p.feeMicro === null ? null : n(p.feeMicro), status: p.status, createdAt: p.createdAt.toISOString() })),
     });
   })
@@ -61,7 +62,12 @@ export const billingRoutes = new Hono<AppEnv>()
     const sys = deps.dbs.system;
     await ensureBillingAccount(sys, ws.id);
     const acct = await sys.selectFrom("billingAccounts").select("stripeCustomerId").where("workspaceId", "=", ws.id).executeTakeFirstOrThrow();
-    const customerId = await deps.payments.ensureCustomer({ existingId: acct.stripeCustomerId, workspaceId: ws.id, email: user.email, name: ws.name });
+    let customerId: string;
+    try {
+      customerId = await deps.payments.ensureCustomer({ existingId: acct.stripeCustomerId, workspaceId: ws.id, email: user.email, name: ws.name });
+    } catch (err) {
+      throw new ApiError(502, "payment_provider", `Could not start checkout: ${String((err as Error).message ?? err)}`);
+    }
     if (!acct.stripeCustomerId) {
       await sys.updateTable("billingAccounts").set({ stripeCustomerId: customerId, updatedAt: new Date() }).where("workspaceId", "=", ws.id).execute();
     }

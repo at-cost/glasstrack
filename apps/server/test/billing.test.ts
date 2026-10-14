@@ -181,6 +181,21 @@ describe("top-ups via Stripe", () => {
     expect((await billing(c, "acme")).balanceMicro).toBe(usdToMicro(10));
   });
 
+  it("explains a payment provider failure instead of a generic error", async () => {
+    const { c } = await setupWorkspace(h, "ann@acme.co", "acme");
+    const original = h.payments.ensureCustomer;
+    h.payments.ensureCustomer = async () => {
+      throw new Error("Payments are not configured (set STRIPE_SECRET_KEY)");
+    };
+    try {
+      const r = await c.post("/api/v1/w/acme/billing/topup", { amountUsd: 10 });
+      expect(r.status).toBe(502);
+      expect(r.body.error.message).toContain("Payments are not configured");
+    } finally {
+      h.payments.ensureCustomer = original;
+    }
+  });
+
   it("validates amounts and roles", async () => {
     const { c } = await setupWorkspace(h, "ann@acme.co", "acme");
     expect((await c.post("/api/v1/w/acme/billing/topup", { amountUsd: 1 })).status).toBe(400);

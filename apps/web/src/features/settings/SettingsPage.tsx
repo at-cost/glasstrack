@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import {
   DIGEST_FREQUENCIES,
   type ExportJob,
@@ -16,54 +16,85 @@ import {
 } from "@glasstrack/shared";
 import { ArrowDown, ArrowUp, Copy, Download, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Card } from "../../components/Card";
 import { ConfirmDialog, Dialog } from "../../components/Dialog";
 import { Empty, Skeleton, Spinner } from "../../components/Feedback";
 import { Avatar, LabelDot, StatusIcon } from "../../components/icons";
 import { ApiError, api, errorMessage } from "../../lib/api";
 import { fullTime, relativeTime } from "../../lib/format";
 import { paths } from "../../lib/paths";
-import { keys, useLabels, useMembers, useStates, useTeams } from "../../lib/queries";
+import { keys, useBilling, useLabels, useMembers, useStates, useTeams } from "../../lib/queries";
 import { setTheme, useTheme } from "../../lib/theme";
 import { toast, toastError } from "../../lib/toast";
 import { PageHeader } from "../issues/pages";
 import { useWs } from "../shell/context";
+import { Billing } from "./Billing";
+import { GitHub } from "./GitHub";
+import { Import } from "./Import";
+import { Tokens } from "./Tokens";
+import { Webhooks } from "./Webhooks";
 
-const TABS = [
+const ALL_TABS = [
   { id: "general", label: "General" },
   { id: "members", label: "Members" },
   { id: "teams", label: "Teams" },
   { id: "notifications", label: "Notifications" },
   { id: "profile", label: "Profile" },
+  { id: "billing", label: "Billing" },
+  { id: "tokens", label: "API tokens" },
+  { id: "webhooks", label: "Webhooks" },
+  { id: "github", label: "GitHub" },
+  { id: "import", label: "Import" },
   { id: "data", label: "Data" },
 ] as const;
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof ALL_TABS)[number]["id"];
 
 export function SettingsPage() {
   const search = useSearch({ strict: false }) as { tab?: string };
+  const params = useParams({ strict: false }) as { tab?: string };
   const navigate = useNavigate();
-  const { slug } = useWs();
-  const tab: TabId = (TABS.find((t) => t.id === search.tab)?.id ?? "general") as TabId;
+  const { slug, isAdmin, workspace } = useWs();
+  const billing = useBilling(slug);
+  const tabs = ALL_TABS.filter((t) => {
+    if (t.id === "billing") return billing.data?.enabled === true;
+    if (t.id === "webhooks" || t.id === "github") return isAdmin;
+    if (t.id === "import" || t.id === "tokens") return workspace.role !== "guest";
+    return true;
+  });
+  const wanted = params.tab ?? search.tab;
+  const tab: TabId = (tabs.find((t) => t.id === wanted)?.id ?? "general") as TabId;
+  // Old links used ?tab=; move them to the path form.
+  useEffect(() => {
+    if (!params.tab && search.tab && search.tab !== "general") {
+      navigate({ to: paths.settings(slug, search.tab), replace: true });
+    }
+  }, [params.tab, search.tab, slug, navigate]);
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const go = (id: TabId) => navigate({ to: paths.settings(slug), search: { tab: id }, replace: true });
+  // On narrow screens the tabs scroll sideways; keep the current one in view.
+  useEffect(() => {
+    tabRefs.current[tab]?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [tab]);
+  const go = (id: TabId) => navigate({ to: paths.settings(slug, id), replace: true });
   const onKey = (e: React.KeyboardEvent) => {
-    const i = TABS.findIndex((t) => t.id === tab);
+    const i = tabs.findIndex((t) => t.id === tab);
     let next = -1;
-    if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (i + 1) % TABS.length;
-    if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = (i - 1 + TABS.length) % TABS.length;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (i + 1) % tabs.length;
+    if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = (i - 1 + tabs.length) % tabs.length;
     if (e.key === "Home") next = 0;
-    if (e.key === "End") next = TABS.length - 1;
+    if (e.key === "End") next = tabs.length - 1;
     if (next < 0) return;
     e.preventDefault();
-    const id = TABS[next]!.id;
+    const id = tabs[next]!.id;
     go(id);
     tabRefs.current[id]?.focus();
   };
+  const waitingForBilling = wanted === "billing" && billing.isPending;
   return (
     <div className="page settings">
       <PageHeader title="Settings" />
       <div className="settings-layout">
         <div role="tablist" aria-label="Settings sections" aria-orientation="vertical" className="settings-tabs" onKeyDown={onKey}>
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.id}
               ref={(el) => {
@@ -83,23 +114,25 @@ export function SettingsPage() {
           ))}
         </div>
         <section role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="settings-panel">
-          {tab === "general" && <General />}
-          {tab === "members" && <Members />}
-          {tab === "teams" && <Teams />}
-          {tab === "notifications" && <Notifications />}
-          {tab === "profile" && <Profile />}
-          {tab === "data" && <Data />}
+          {waitingForBilling ? (
+            <Skeleton rows={4} />
+          ) : (
+            <>
+              {tab === "general" && <General />}
+              {tab === "members" && <Members />}
+              {tab === "teams" && <Teams />}
+              {tab === "notifications" && <Notifications />}
+              {tab === "profile" && <Profile />}
+              {tab === "billing" && <Billing />}
+              {tab === "tokens" && <Tokens />}
+              {tab === "webhooks" && <Webhooks />}
+              {tab === "github" && <GitHub />}
+              {tab === "import" && <Import />}
+              {tab === "data" && <Data />}
+            </>
+          )}
         </section>
       </div>
-    </div>
-  );
-}
-
-function Card({ title, children, danger }: { title: string; children: React.ReactNode; danger?: boolean }) {
-  return (
-    <div className={`card-box${danger ? " danger" : ""}`}>
-      <h2 className="card-title">{title}</h2>
-      {children}
     </div>
   );
 }

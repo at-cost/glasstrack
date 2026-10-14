@@ -37,6 +37,10 @@
   --avatar-l: 72%;
   --avatar-fg: #2a2620;
   --scrim: rgb(35 30 22 / 38%);
+  --positive: #2e6b3f;
+  --series-1: #2f6fb5;
+  --series-2: #c45a1c;
+  --chart-ref: #8a8577;
   --radius-sm: 5px;
   --radius: 7px;
   --radius-lg: 11px;
@@ -78,6 +82,10 @@
     --avatar-l: 42%;
     --avatar-fg: #f4efe6;
     --scrim: rgb(0 0 0 / 55%);
+  --positive: #86c79a;
+  --series-1: #4f8fd6;
+  --series-2: #d0703a;
+  --chart-ref: #8a8477;
   }
 }
 
@@ -115,6 +123,10 @@
   --avatar-l: 42%;
   --avatar-fg: #f4efe6;
   --scrim: rgb(0 0 0 / 55%);
+  --positive: #86c79a;
+  --series-1: #4f8fd6;
+  --series-2: #d0703a;
+  --chart-ref: #8a8477;
 }
 
 *,

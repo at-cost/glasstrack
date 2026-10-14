@@ -100,6 +100,13 @@ describe("workspaces, invites and roles", () => {
     expect(states.map((s) => s.name)).toEqual(["Backlog", "Todo", "In Progress", "In Review", "Done", "Cancelled"]);
   });
 
+  it("rejects reserved slugs that would clash with app pages", async () => {
+    const c = await new Client(h).login("r@x.co");
+    for (const slug of ["finances", "admin", "login", "new"]) {
+      expect((await c.post("/api/v1/workspaces", { name: "X", slug })).status, slug).toBe(400);
+    }
+  });
+
   it("rejects duplicate slugs", async () => {
     await setupWorkspace(h, "owner@acme.co", "acme");
     const c = await new Client(h).login("other@x.co");

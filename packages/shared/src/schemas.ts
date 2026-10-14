@@ -7,13 +7,20 @@ const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 export const emailSchema = z.email().max(254).transform((e) => e.trim().toLowerCase());
 
+/** Top-level app and server paths a workspace URL must not shadow. */
+export const RESERVED_SLUGS = new Set([
+  "admin", "api", "assets", "auth", "finances", "health", "invite", "login", "logout", "new", "ready", "settings",
+  "signup", "static", "docs", "pricing", "about", "status", "help", "support", "www", "app", "glasstrack",
+]);
+
 export const createWorkspaceSchema = z.object({
   name: z.string().trim().min(1).max(80),
   slug: z
     .string()
     .trim()
     .toLowerCase()
-    .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/, "3-40 chars: letters, digits, dashes"),
+    .regex(/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/, "3-40 chars: letters, digits, dashes")
+    .refine((s) => !RESERVED_SLUGS.has(s), "That URL is reserved, please pick another"),
 });
 export const updateWorkspaceSchema = z.object({ name: z.string().trim().min(1).max(80) });
 

@@ -60,7 +60,7 @@ export function InboxPage() {
   return (
     <div className="page">
       <PageHeader title="Inbox" sub={unreadCount ? `${unreadCount} unread` : undefined}>
-        <Link to={paths.settings(slug)} search={{ tab: "notifications" }} className="btn btn-sm btn-ghost">
+        <Link to={paths.settings(slug, "notifications")} className="btn btn-sm btn-ghost">
           <Settings size={14} aria-hidden="true" />
           <span className="hide-mobile">Settings</span>
         </Link>

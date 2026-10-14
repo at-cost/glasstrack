@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type Activity, type Comment, type IssueDetail, type Member, PRIORITY_LABELS, type Priority } from "@glasstrack/shared";
 import { Pencil, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ConfirmDialog } from "../../components/Dialog";
 import { Avatar } from "../../components/icons";
 import { Markdown, MentionTextarea } from "../../components/MarkdownEditor";
@@ -11,6 +11,18 @@ import { keys, useActivity, useComments, useCycles, useLabels, useMembers, useSt
 import { toastError } from "../../lib/toast";
 import { useWs } from "../shell/context";
 import { cycleLabel } from "./options";
+
+const SOURCE_NAME: Record<string, string> = { linear: "Linear", jira: "Jira", trello: "Trello" };
+
+/** Who did it. Automated entries have no actor. */
+function actorName(a: Activity, name: string | undefined): string {
+  if (a.actorId === null) {
+    const d = a.data as Record<string, unknown>;
+    if (a.kind === "pr_linked" || a.kind === "pr_merged" || d.via === "github") return "GitHub";
+    return "Glasstrack";
+  }
+  return name ?? "A former member";
+}
 
 type Item = { kind: "comment"; at: string; c: Comment } | { kind: "activity"; at: string; a: Activity };
 
@@ -28,9 +40,26 @@ function useDescribe() {
     const c = cycles.data?.find((x) => x.id === id);
     return c ? cycleLabel(c) : "a removed cycle";
   };
-  return (a: Activity): string => {
+  const prLink = (d: Record<string, unknown>) => {
+    const url = typeof d.url === "string" && /^https:\/\//.test(d.url) ? d.url : null;
+    const title = String(d.title ?? "a pull request");
+    return url ? (
+      <a href={url} target="_blank" rel="noreferrer">
+        {title}
+      </a>
+    ) : (
+      title
+    );
+  };
+  return (a: Activity): ReactNode => {
     const d = a.data as Record<string, unknown>;
     switch (a.kind) {
+      case "imported":
+        return `imported this from ${SOURCE_NAME[String(d.source)] ?? "another tracker"}${d.externalId ? ` (${String(d.externalId)})` : ""}`;
+      case "pr_linked":
+        return <>linked pull request {prLink(d)}</>;
+      case "pr_merged":
+        return <>merged pull request {prLink(d)}</>;
       case "created":
         return "created the issue";
       case "title":
@@ -38,6 +67,7 @@ function useDescribe() {
       case "description":
         return "updated the description";
       case "status":
+        if (d.via === "github") return `moved this to ${stateName(d.to)} after a pull request was merged`;
         return `changed status from ${stateName(d.from)} to ${stateName(d.to)}`;
       case "priority":
         return `set priority to ${PRIORITY_LABELS[(Number(d.to) || 0) as Priority]}`;
@@ -100,7 +130,7 @@ export function Timeline({ issue }: { issue: IssueDetail }) {
             <li key={`a${it.a.id}`} className="tl-activity">
               <span className="tl-dot" aria-hidden="true" />
               <span>
-                <strong>{member(it.a.actorId)?.name ?? "Someone"}</strong> {describe(it.a)}
+                <strong>{actorName(it.a, member(it.a.actorId)?.name)}</strong> {describe(it.a)}
               </span>
               <time dateTime={it.a.createdAt} title={fullTime(it.a.createdAt)} className="tl-time">
                 {relativeTime(it.a.createdAt)}
