@@ -1,0 +1,12 @@
+# Production behind Cloudflare: Caddy always on with the Origin CA cert, and the
+# app port not published on the host.
+# docker compose -f docker-compose.yml -f deploy/docker-compose.cloudflare.yml up -d --build
+services:
+  app:
+    ports: !reset []
+  caddy:
+    profiles: !reset []
+    volumes:
+      - ./docker/Caddyfile.cloudflare:/etc/caddy/Caddyfile:ro
+      - ./tls:/tls:ro
+      - caddydata:/data

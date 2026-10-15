@@ -1,0 +1,18 @@
+# Behind Cloudflare (proxied DNS, SSL mode "Full (strict)") with a Cloudflare
+# Origin CA certificate in ./tls. Ports 80/443 should only accept Cloudflare's
+# IP ranges (firewall), which is what makes CF-Connecting-IP trustworthy.
+{$DOMAIN} {
+	tls /tls/origin.pem /tls/origin.key
+	encode zstd gzip
+	reverse_proxy app:3000 {
+		# SSE needs unbuffered streaming
+		flush_interval -1
+		# The visitor's real IP, for rate limits and logs
+		header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+	}
+}
+
+www.{$DOMAIN} {
+	tls /tls/origin.pem /tls/origin.key
+	redir https://{$DOMAIN}{uri} permanent
+}
