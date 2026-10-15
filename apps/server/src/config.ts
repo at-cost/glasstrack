@@ -44,22 +44,15 @@ const schema = z.object({
   GITHUB_CLIENT_SECRET: z.string().default(""),
 
   BILLING_ENABLED: bool.default(false),
+  /* Prices, credit and top-up limits live in the pricing_settings table (operator admin), not here. */
+  /** Publish /finances (costs, reserve) even while billing is off. On by default when billing is on. */
+  FINANCES_PUBLIC: bool.default(false),
   STRIPE_SECRET_KEY: z.string().default(""),
   STRIPE_WEBHOOK_SECRET: z.string().default(""),
-  /** Initial flat monthly price per workspace, USD. Only used to seed pricing_config. */
-  BILLING_INITIAL_PRICE_USD: z.coerce.number().positive().default(10),
-  BILLING_STARTER_CREDIT_USD: z.coerce.number().min(0).default(10),
   /** Max starter grants per email domain per 30 days (public mail domains exempt). */
   BILLING_STARTER_DOMAIN_LIMIT: z.coerce.number().int().min(0).default(3),
-  BILLING_FREE_STORAGE_GB: z.coerce.number().min(0).default(10),
-  /** At-cost storage price per GB-month above the free allowance (S3 standard by default). */
-  BILLING_STORAGE_USD_PER_GB_MONTH: z.coerce.number().min(0).default(0.023),
-  BILLING_MIN_TOPUP_USD: z.coerce.number().positive().default(5),
-  BILLING_MAX_TOPUP_USD: z.coerce.number().positive().default(1000),
   /** Comma-separated emails allowed into the operator admin (costs, pricing). */
   OPERATOR_EMAILS: z.string().default(""),
-  /** Per-email cost used in cost allocation, USD (SES list price by default). */
-  COST_EMAIL_USD: z.coerce.number().min(0).default(0.0001),
   AWS_COST_EXPLORER_ENABLED: bool.default(false),
   AWS_ACCESS_KEY_ID: z.string().default(""),
   AWS_SECRET_ACCESS_KEY: z.string().default(""),

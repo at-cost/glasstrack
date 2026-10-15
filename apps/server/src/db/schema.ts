@@ -9,6 +9,7 @@ type Json<T> = ColumnType<T, T | string, T | string>;
 /** numeric comes back as string from pg; we parse it in mappers */
 type Numeric = ColumnType<string, number | string, number | string>;
 type BigIntCol = ColumnType<string, number | bigint | string, number | bigint | string>;
+type NumericCol = ColumnType<string, number | string, number | string>;
 type BigIntDefault = ColumnType<string, number | bigint | string | undefined, number | bigint | string>;
 
 export interface UsersTable {
@@ -270,6 +271,10 @@ export interface BillingAccountsTable {
   graceStartedAt: Ts | null;
   warningsSent: Generated<number>;
   lastChargedOn: DateOnly | null;
+  monthlyCapMicro: BigIntCol | null;
+  lastCreditMicro: BigIntDefault;
+  lowBalanceNotified: Generated<boolean>;
+  refundRequestedAt: Ts | null;
   updatedAt: TsDefault;
 }
 export interface PaymentsTable {
@@ -315,6 +320,7 @@ export interface WorkspaceCostDailyTable {
   emailMicro: BigIntCol;
   feesMicro: BigIntCol;
   totalMicro: BigIntCol;
+  active: Generated<boolean>;
 }
 export interface CostEntriesTable {
   id: string;
@@ -326,6 +332,7 @@ export interface CostEntriesTable {
   publicLabel: string;
   note: string | null;
   externalKey: string | null;
+  paidByCredits: Generated<boolean>;
   createdBy: Generated<string>;
   createdAt: TsDefault;
 }
@@ -343,8 +350,44 @@ export interface FinanceDailyTable {
   reserveTargetMicro: BigIntCol;
   priceMicro: BigIntCol;
   recommendedPriceMicro: BigIntCol | null;
-  marginBp: number;
+  marginBp: Generated<number>;
+  sharedFixedMicro: BigIntDefault;
+  creditHeldMicro: BigIntDefault;
+  founderGapMicro: BigIntDefault;
+  serverShareCapMicro: BigIntDefault;
+  recommendedCapMicro: BigIntCol | null;
+  costsPaidByCredits: Json<string[]>;
   computedAt: TsDefault;
+}
+export interface PricingSettingsTable {
+  id: Generated<number>;
+  effectiveFrom: TsDefault;
+  signupCreditUsd: NumericCol;
+  serverShareCapUsd: NumericCol;
+  feeMarkup: NumericCol;
+  minTopupUsd: NumericCol;
+  maxTopupUsd: NumericCol;
+  storageUsdPerGbMonth: NumericCol;
+  emailUsdPerThousand: NumericCol;
+  stripeFeePercent: NumericCol;
+  stripeFeeFixedUsd: NumericCol;
+  reserveTargetMonths: NumericCol;
+  reason: string;
+  createdBy: Generated<string>;
+}
+export interface CostSavingsTable {
+  id: string;
+  day: DateOnly;
+  change: string;
+  savingMonthMicro: BigIntCol;
+  createdBy: Generated<string>;
+  createdAt: TsDefault;
+}
+export interface PageViewsTable {
+  day: DateOnly;
+  path: string;
+  referrerHost: Generated<string>;
+  views: Generated<number>;
 }
 
 export interface ApiTokensTable {
@@ -601,6 +644,9 @@ export interface DB {
   workspaceCostDaily: WorkspaceCostDailyTable;
   costEntries: CostEntriesTable;
   financeDaily: FinanceDailyTable;
+  pricingSettings: PricingSettingsTable;
+  costSavings: CostSavingsTable;
+  pageViews: PageViewsTable;
   apiTokens: ApiTokensTable;
   webhooks: WebhooksTable;
   webhookDeliveries: WebhookDeliveriesTable;

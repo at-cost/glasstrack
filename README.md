@@ -7,8 +7,8 @@ An open-source ticket tracker for software teams: issues, boards, cycles, keyboa
 ## The mission
 
 - **Free to self-host, with every feature.** No paid-only features, ever. SSO included, when it lands.
-- **Hosted at cost.** The hosted service charges running cost plus 10% until a reserve covers six months of costs, then cost plus 2%. The price only ever goes down.
-- **Public finances.** Income, every cost line, cost per workspace, the reserve and the current price are shown on a public page.
+- **Hosted at cost, pay-as-you-go.** Each hosted workspace pays a share of the servers (capped at $5 a month), its own storage and email, plus 20% for payment fees and a small reserve, from prepaid credit charged daily. New workspaces get $10 of credit. The cap only ever goes down. The maths is in [`packages/shared/src/money/pricing.ts`](packages/shared/src/money/pricing.ts).
+- **Public finances.** Revenue, credit held, every cost line, how much the founder covers, the reserve and the server share cap are shown on a public page.
 - **Efficiency is a feature.** Because price equals cost, the whole stack runs on one small server (2 vCPU, 4 GB RAM) for hundreds of teams. Postgres is the only stateful dependency.
 
 ## Features

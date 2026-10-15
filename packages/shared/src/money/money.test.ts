@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   allocateCosts,
   assertPriceNotIncreased,
-  dailyCharge,
   dailyShare,
   distribute,
   formatUsd,
@@ -18,11 +17,6 @@ import {
 const day = (n: number) => new Date(Date.UTC(2026, 0, 1 + n));
 
 describe("charges", () => {
-  it("charges $10/month as the same amount every day, $120 a year", () => {
-    const d = dailyCharge(usdToMicro(10));
-    expect(d).toBe(328_767);
-    expect(Math.abs(d * 365 - usdToMicro(120))).toBeLessThan(365);
-  });
   it("storage overage only above the free allowance", () => {
     expect(storageOverageDaily(9 * GIB, 10, usdToMicro(0.023))).toBe(0);
     expect(storageOverageDaily(10 * GIB, 10, usdToMicro(0.023))).toBe(0);

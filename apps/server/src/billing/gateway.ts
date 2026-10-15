@@ -23,6 +23,8 @@ export interface PaymentGateway {
   }): Promise<{ paymentIntentId: string; status: string }>;
   /** Actual Stripe fee in USD cents, from the balance transaction. null while not yet available. */
   fetchFee(paymentIntentId: string): Promise<{ feeCents: number; netCents: number } | null>;
+  /** Refunds part or all of a payment. Idempotent per payment and amount. */
+  refund(p: { paymentIntentId: string; amountCents: number; paymentId: string }): Promise<{ id: string }>;
   /** Card saved during a Checkout payment, if the customer agreed to save it. */
   savedCard(paymentIntentId: string): Promise<{ id: string; label: string } | null>;
   verifyWebhook(rawBody: string, signature: string): Promise<Stripe.Event>;
@@ -84,6 +86,13 @@ export function stripeGateway(config: Config): PaymentGateway {
       );
       return { paymentIntentId: pi.id, status: pi.status };
     },
+    async refund(p) {
+      const r = await stripe.refunds.create(
+        { payment_intent: p.paymentIntentId, amount: p.amountCents, reason: "requested_by_customer", metadata: { payment_id: p.paymentId } },
+        { idempotencyKey: `refund:${p.paymentId}:${p.amountCents}` },
+      );
+      return { id: r.id };
+    },
     async fetchFee(paymentIntentId) {
       const pi = await stripe.paymentIntents.retrieve(paymentIntentId, { expand: ["latest_charge.balance_transaction"] });
       const charge = pi.latest_charge as Stripe.Charge | null;
@@ -114,6 +123,6 @@ export function disabledGateway(): PaymentGateway {
   const no = async (): Promise<never> => {
     throw new Error("Payments are not configured (set STRIPE_SECRET_KEY)");
   };
-  return { ensureCustomer: no, createTopupCheckout: no, chargeSavedCard: no, fetchFee: no, savedCard: no, verifyWebhook: no };
+  return { ensureCustomer: no, createTopupCheckout: no, chargeSavedCard: no, fetchFee: no, refund: no, savedCard: no, verifyWebhook: no };
 }
 

@@ -38,14 +38,18 @@ function kysely(pool: pg.Pool): Db {
 }
 
 export function createDatabases(config: Config): Databases {
-  const ownerPool = new pg.Pool({ connectionString: config.DATABASE_URL, max: 3 });
+  // Every session in UTC, so date boundaries (billing days, reports, finances) never depend on the server's time zone.
+  const utc = { options: "-c TimeZone=UTC" };
+  const ownerPool = new pg.Pool({ connectionString: config.DATABASE_URL, max: 3, ...utc });
   const appPool = new pg.Pool({
     connectionString: withUser(config.DATABASE_URL, "glasstrack_app", config.DB_APP_PASSWORD),
     max: config.DB_POOL_SIZE,
+    ...utc,
   });
   const systemPool = new pg.Pool({
     connectionString: withUser(config.DATABASE_URL, "glasstrack_system", config.DB_SYSTEM_PASSWORD),
     max: Math.max(3, Math.floor(config.DB_POOL_SIZE / 2)),
+    ...utc,
   });
   for (const p of [ownerPool, appPool, systemPool]) {
     p.on("error", (err) => {

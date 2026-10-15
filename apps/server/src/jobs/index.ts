@@ -39,12 +39,13 @@ export async function createBossJobs(config: Config): Promise<Jobs & { boss: PgB
       if (config.BILLING_ENABLED) {
         await boss.schedule("billing.daily", "10 0 * * *", null, { tz: "UTC" });
         await boss.schedule("billing.fees", "20 * * * *");
-        await boss.schedule("finances.daily", "40 0 * * *", null, { tz: "UTC" });
       } else {
         await boss.unschedule("billing.daily").catch(() => undefined);
         await boss.unschedule("billing.fees").catch(() => undefined);
-        await boss.unschedule("finances.daily").catch(() => undefined);
       }
+      // Hourly, so the public pages show today's figures (recomputing recent days is cheap and idempotent).
+      if (config.BILLING_ENABLED || config.FINANCES_PUBLIC) await boss.schedule("finances.daily", "40 * * * *");
+      else await boss.unschedule("finances.daily").catch(() => undefined);
       if (config.BACKUP_ENABLED) await boss.schedule("backup.run", config.BACKUP_CRON);
       else await boss.unschedule("backup.run").catch(() => undefined);
       logger.info("job workers started");

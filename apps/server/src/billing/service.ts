@@ -1,10 +1,10 @@
 import { sql } from "kysely";
 import {
   dailyCharge,
+  daysInMonth,
   formatUsd,
-  GIB,
+  monthlyCost,
   nextBillingState,
-  storageOverageDaily,
   usdToMicro,
 } from "@glasstrack/shared";
 import type { Deps } from "../context";
@@ -12,6 +12,7 @@ import type { Db } from "../db";
 import { layout } from "../email";
 import { sha256, uuid7 } from "../lib/ids";
 import { logger } from "../lib/logger";
+import { activeWorkspaceIds, loadSettings, sharedFixedMonthMicro, workspaceUsage } from "./pricing";
 
 /** Public mail providers: capped per address, not per domain. */
 const PUBLIC_DOMAINS = new Set([
@@ -23,16 +24,6 @@ const PUBLIC_DOMAINS = new Set([
 const toNum = (v: string | number | bigint | null | undefined) => (v === null || v === undefined ? 0 : Number(v));
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 const addDays = (day: string, n: number) => isoDay(new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000));
-
-/** Current monthly price; seeds the config table from env on first use. */
-export async function currentPriceMicro(deps: Pick<Deps, "dbs" | "config">): Promise<number> {
-  const sys = deps.dbs.system;
-  const row = await sys.selectFrom("pricingConfig").select("monthlyPriceMicro").orderBy("id", "desc").limit(1).executeTakeFirst();
-  if (row) return toNum(row.monthlyPriceMicro);
-  const initial = usdToMicro(deps.config.BILLING_INITIAL_PRICE_USD);
-  await sys.insertInto("pricingConfig").values({ monthlyPriceMicro: initial, reason: "Initial price" }).execute();
-  return initial;
-}
 
 export async function balanceMicro(db: Db, workspaceId: string): Promise<number> {
   const r = await db
@@ -88,7 +79,7 @@ export async function grantStarterCredit(
 ): Promise<{ granted: boolean; reason?: string }> {
   const sys = deps.dbs.system;
   await ensureBillingAccount(sys, p.workspaceId);
-  const amount = usdToMicro(deps.config.BILLING_STARTER_CREDIT_USD);
+  const amount = usdToMicro((await loadSettings(sys)).signupCreditUsd);
   if (amount <= 0) return { granted: false, reason: "no_starter_credit" };
   const user = await sys.selectFrom("users").select(["email", "emailVerifiedAt"]).where("id", "=", p.userId).executeTakeFirst();
   if (!user?.emailVerifiedAt) return { granted: false, reason: "email_not_verified" };
@@ -110,6 +101,7 @@ export async function grantStarterCredit(
     }
     await trx.insertInto("starterCreditClaims").values({ id: uuid7(), emailHash: sha256(email), domain, workspaceId: p.workspaceId }).execute();
     await addLedger(trx, { workspaceId: p.workspaceId, kind: "starter_grant", amountMicro: amount, key: `starter:${p.workspaceId}`, memo: "Starter credit" });
+    await trx.updateTable("billingAccounts").set({ lastCreditMicro: amount, lowBalanceNotified: false, updatedAt: new Date() }).where("workspaceId", "=", p.workspaceId).execute();
     return { granted: true };
   });
 }
@@ -133,18 +125,48 @@ const MAX_CATCH_UP_DAYS = 31;
  * read-only. Read-only workspaces are not charged, so debt never piles up.
  * Idempotent: every charge has a per-day key, so reruns change nothing.
  */
+/** Inputs that are the same for every workspace on a given day. */
+export async function dayInputs(deps: Deps, day: string) {
+  const sys = deps.dbs.system;
+  return { day, sharedFixed: await sharedFixedMonthMicro(sys, day), active: await activeWorkspaceIds(sys, day), days: daysInMonth(day) };
+}
+
+/** One workspace's charge for one day, from the shared pricing module. */
+export async function chargeFor(deps: Deps, workspaceId: string, inputs: Awaited<ReturnType<typeof dayInputs>>, settings: Awaited<ReturnType<typeof loadSettings>>) {
+  const usage = await workspaceUsage(deps.dbs.system, workspaceId, inputs.day);
+  const active = inputs.active.has(workspaceId);
+  const month = monthlyCost({
+    settings, sharedFixedMonthMicro: inputs.sharedFixed, activeWorkspaces: inputs.active.size, storageGb: usage.storageGb, emailsPerMonth: usage.emailsPerMonth, active,
+  });
+  return { month, day: dailyCharge(month, inputs.days), usage, active };
+}
+
+const usd = (micro: number) => formatUsd(micro, { precise: true });
+
+/**
+ * Nightly, per workspace: charge each day since the last charge (catching up
+ * after downtime, at most 31 days), then move between active, grace and
+ * read-only and send low-balance emails. Read-only workspaces are not charged.
+ * Idempotent: every charge has a per-day key, so reruns change nothing.
+ */
 export async function runDailyBilling(deps: Deps, now = new Date()): Promise<{ workspaces: number; charged: number }> {
   if (!deps.config.BILLING_ENABLED) return { workspaces: 0, charged: 0 };
   const sys = deps.dbs.system;
-  const price = await currentPriceMicro(deps);
-  const perDay = dailyCharge(price);
+  const settings = await loadSettings(sys);
   const today = isoDay(now);
   const workspaces = await sys
     .selectFrom("workspaces as w")
     .leftJoin("billingAccounts as b", "b.workspaceId", "w.id")
-    .select(["w.id", "w.name", "w.slug", "w.status", "w.createdAt", "b.lastChargedOn", "b.graceStartedAt", "b.warningsSent", "b.autoTopupEnabled", "b.autoTopupThresholdMicro"])
+    .select(["w.id", "w.name", "w.slug", "w.status", "w.createdAt", "b.lastChargedOn", "b.graceStartedAt", "b.warningsSent", "b.autoTopupEnabled",
+      "b.autoTopupThresholdMicro", "b.lastCreditMicro", "b.lowBalanceNotified"])
     .where("w.status", "!=", "deleting")
     .execute();
+  const inputsByDay = new Map<string, Awaited<ReturnType<typeof dayInputs>>>();
+  const inputsFor = async (day: string) => {
+    let v = inputsByDay.get(day);
+    if (!v) inputsByDay.set(day, (v = await dayInputs(deps, day)));
+    return v;
+  };
   let charged = 0;
   const base = deps.config.APP_URL.replace(/\/$/, "");
   for (const ws of workspaces) {
@@ -153,22 +175,27 @@ export async function runDailyBilling(deps: Deps, now = new Date()): Promise<{ w
       if (ws.status !== "read_only") {
         let day = ws.lastChargedOn ? addDays(ws.lastChargedOn, 1) : isoDay(ws.createdAt);
         if (day < addDays(today, -MAX_CATCH_UP_DAYS + 1)) day = addDays(today, -MAX_CATCH_UP_DAYS + 1);
-        const bytes = await storageBytes(sys, ws.id);
-        const overage = storageOverageDaily(bytes, deps.config.BILLING_FREE_STORAGE_GB, usdToMicro(deps.config.BILLING_STORAGE_USD_PER_GB_MONTH));
         for (; day <= today; day = addDays(day, 1)) {
-          if (await addLedger(sys, { workspaceId: ws.id, kind: "charge", amountMicro: -perDay, key: `charge:${ws.id}:${day}`, refType: "day", refId: day, memo: `Daily charge (${formatUsd(price)}/month)` })) charged++;
-          if (overage > 0) {
-            await addLedger(sys, {
-              workspaceId: ws.id, kind: "storage_charge", amountMicro: -overage, key: `storage:${ws.id}:${day}`, refType: "day", refId: day,
-              memo: `Storage over ${deps.config.BILLING_FREE_STORAGE_GB} GB (${(bytes / GIB).toFixed(2)} GB stored)`,
-            });
-          }
+          const c = await chargeFor(deps, ws.id, await inputsFor(day), settings);
+          const d = c.day;
+          const memo = `Server ${usd(d.serverShareMicro)}, storage ${usd(d.storageMicro)} (${c.usage.storageGb.toFixed(2)} GB), email ${usd(d.emailMicro)}, fees and reserve ${usd(d.feesAndReserveMicro)}`;
+          if (d.totalMicro > 0 && (await addLedger(sys, { workspaceId: ws.id, kind: "charge", amountMicro: -d.totalMicro, key: `charge:${ws.id}:${day}`, refType: "day", refId: day, memo }))) charged++;
+          await sys.insertInto("workspaceCostDaily").values({
+            workspaceId: ws.id, day, sharedMicro: d.serverShareMicro, storageMicro: d.storageMicro, emailMicro: d.emailMicro, feesMicro: d.feesAndReserveMicro,
+            totalMicro: d.totalMicro, active: c.active,
+          }).onConflict((oc) => oc.columns(["workspaceId", "day"]).doNothing()).execute();
         }
         await sys.updateTable("billingAccounts").set({ lastChargedOn: today, updatedAt: new Date() }).where("workspaceId", "=", ws.id).execute();
       }
       const balance = await balanceMicro(sys, ws.id);
       if (ws.autoTopupEnabled && balance < toNum(ws.autoTopupThresholdMicro) && ws.status !== "deleting") {
         await deps.jobs.send("billing.autotopup", { workspaceId: ws.id });
+      }
+      // Low balance: one email when it drops below 25% of the last credit added (the $0 emails come from grace below).
+      const lastCredit = toNum(ws.lastCreditMicro);
+      if (balance > 0 && lastCredit > 0 && balance < lastCredit * LOW_BALANCE_FRACTION && !ws.lowBalanceNotified && !ws.autoTopupEnabled) {
+        await sendLowBalanceEmail(deps, ws, balance, `${base}/${ws.slug}/settings/billing`);
+        await sys.updateTable("billingAccounts").set({ lowBalanceNotified: true, updatedAt: new Date() }).where("workspaceId", "=", ws.id).execute();
       }
       const status = ws.status === "grace" || ws.status === "read_only" ? ws.status : "active";
       const next = nextBillingState(
@@ -185,6 +212,17 @@ export async function runDailyBilling(deps: Deps, now = new Date()): Promise<{ w
     }
   }
   return { workspaces: workspaces.length, charged };
+}
+
+export const LOW_BALANCE_FRACTION = 0.25;
+
+async function sendLowBalanceEmail(deps: Deps, ws: { id: string; name: string }, balance: number, url: string) {
+  const subject = `${ws.name}: credit is running low`;
+  const { text, html } = layout(subject, [
+    `The ${ws.name} workspace has ${formatUsd(balance)} of credit left.`,
+    "Top up, or turn on automatic top-up, to keep everything running. If it reaches $0, everything keeps working for 7 more days before the workspace becomes read-only. Nothing is ever deleted.",
+  ], { label: "Open billing", url });
+  for (const to of await adminEmails(deps.dbs.system, ws.id)) await deps.mailer.send({ to, subject, text, html, workspaceId: ws.id });
 }
 
 async function sendBillingEmail(
@@ -239,6 +277,8 @@ export async function creditPayment(
       workspaceId: p.workspaceId, kind: "topup", amountMicro, key: `topup:${p.paymentIntentId}`, refType: "payment",
       refId: p.paymentId, memo: p.kind === "auto_topup" ? "Automatic top-up" : "Top-up", createdBy: "stripe",
     });
+    await trx.updateTable("billingAccounts").set({ lastCreditMicro: amountMicro, lowBalanceNotified: false, updatedAt: new Date() })
+      .where("workspaceId", "=", p.workspaceId).execute();
   });
   await recordFee(deps, p.paymentId, p.paymentIntentId);
   // A top-up may end grace or read-only right away rather than at the next daily run.
@@ -290,6 +330,14 @@ export async function runAutoTopup(deps: Deps, workspaceId: string): Promise<voi
   if (recent) return;
   const paymentId = uuid7();
   const amountMicro = toNum(acct.autoTopupAmountMicro);
+  // Monthly spending cap: automatic top-ups stop once this month's top-ups would pass it.
+  if (acct.monthlyCapMicro !== null) {
+    const spent = await topupsThisMonthMicro(sys, workspaceId);
+    if (spent + amountMicro > toNum(acct.monthlyCapMicro)) {
+      logger.info({ workspaceId }, "automatic top-up skipped: monthly spending cap reached");
+      return;
+    }
+  }
   await sys.insertInto("payments").values({ id: paymentId, workspaceId, kind: "auto_topup", amountMicro, status: "pending" }).execute();
   try {
     const r = await deps.payments.chargeSavedCard({
@@ -318,4 +366,77 @@ export async function backfillFees(deps: Deps): Promise<number> {
   let n = 0;
   for (const r of rows) if (await recordFee(deps, r.id, r.stripePaymentIntentId!)) n++;
   return n;
+}
+
+/** Top-ups (manual and automatic) that succeeded or are pending this calendar month (UTC). */
+export async function topupsThisMonthMicro(db: Db, workspaceId: string, now = new Date()): Promise<number> {
+  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const r = await db.selectFrom("payments").select(sql<string>`coalesce(sum(amount_micro), 0)`.as("s"))
+    .where("workspaceId", "=", workspaceId).where("status", "in", ["succeeded", "pending"]).where("createdAt", ">=", from).executeTakeFirstOrThrow();
+  return toNum(r.s);
+}
+
+/**
+ * Unused credit that came from payments (the signup credit is spent first and
+ * isn't refundable as cash): balance − unspent signup credit, never below 0.
+ */
+export async function refundableMicro(db: Db, workspaceId: string): Promise<number> {
+  const r = await db.selectFrom("creditLedger").select([
+    sql<string>`coalesce(sum(amount_micro), 0)`.as("balance"),
+    sql<string>`coalesce(sum(amount_micro) FILTER (WHERE kind = 'starter_grant'), 0)`.as("starter"),
+    sql<string>`coalesce(-sum(amount_micro) FILTER (WHERE kind IN ('charge', 'storage_charge')), 0)`.as("charged"),
+  ]).where("workspaceId", "=", workspaceId).executeTakeFirstOrThrow();
+  const unspentStarter = Math.max(0, toNum(r.starter) - toNum(r.charged));
+  return Math.max(0, toNum(r.balance) - unspentStarter);
+}
+
+/**
+ * Refunds unused paid credit through the payment provider, newest payment
+ * first, and records each refund in the ledger. Returns the amount refunded.
+ */
+export async function refundUnusedCredit(deps: Deps, workspaceId: string, by: string): Promise<number> {
+  const sys = deps.dbs.system;
+  let remaining = await refundableMicro(sys, workspaceId);
+  if (remaining <= 0) return 0;
+  const payments = await sys.selectFrom("payments").select(["id", "amountMicro", "stripePaymentIntentId"])
+    .where("workspaceId", "=", workspaceId).where("status", "in", ["succeeded", "refunded"]).where("stripePaymentIntentId", "is not", null)
+    .orderBy("succeededAt", "desc").execute();
+  let refunded = 0;
+  for (const p of payments) {
+    if (remaining <= 0) break;
+    const already = await sys.selectFrom("creditLedger").select(sql<string>`coalesce(-sum(amount_micro), 0)`.as("r"))
+      .where("kind", "=", "refund").where("refType", "=", "payment").where("refId", "=", p.id).executeTakeFirstOrThrow();
+    const left = toNum(p.amountMicro) - toNum(already.r);
+    // Stripe refunds whole cents.
+    const amountMicro = Math.floor(Math.min(left, remaining) / 10_000) * 10_000;
+    if (amountMicro <= 0) continue;
+    const r = await deps.payments.refund({ paymentIntentId: p.stripePaymentIntentId!, amountCents: amountMicro / 10_000, paymentId: p.id });
+    await addLedger(sys, {
+      workspaceId, kind: "refund", amountMicro: -amountMicro, key: `refund:${r.id}`, refType: "payment", refId: p.id, memo: "Refund of unused credit", createdBy: by,
+    });
+    await sys.updateTable("payments").set({ status: "refunded" }).where("id", "=", p.id).where(sql<boolean>`${amountMicro + toNum(already.r)} >= amount_micro`).execute();
+    remaining -= amountMicro;
+    refunded += amountMicro;
+  }
+  await sys.updateTable("billingAccounts").set({ refundRequestedAt: null, autoTopupEnabled: false, updatedAt: new Date() }).where("workspaceId", "=", workspaceId).execute();
+  return refunded;
+}
+
+/** If the service closes: refund every workspace's unused paid credit. */
+export async function refundAll(deps: Deps, by: string): Promise<{ workspaces: number; refundedMicro: number; failed: string[] }> {
+  const ids = await deps.dbs.system.selectFrom("creditLedger").select("workspaceId").where("kind", "=", "topup").groupBy("workspaceId").execute();
+  let total = 0;
+  let n = 0;
+  const failed: string[] = [];
+  for (const { workspaceId } of ids) {
+    try {
+      const r = await refundUnusedCredit(deps, workspaceId, by);
+      if (r > 0) n++;
+      total += r;
+    } catch (err) {
+      logger.error({ err, workspaceId }, "refund failed");
+      failed.push(workspaceId);
+    }
+  }
+  return { workspaces: n, refundedMicro: total, failed };
 }

@@ -122,3 +122,24 @@ Set the webhook in your host to the `webhookUrl` from the integration:
 - **Gitea / Forgejo:** type Gitea/Forgejo, content type JSON, the secret, "Pull request" events.
 
 Mention an issue key (like `ENG-12`) in the title, description or branch name to link it.
+
+## Billing (hosted mode)
+
+Prepaid, pay-as-you-go at cost, charged nightly per workspace from [`packages/shared/src/money/pricing.ts`](../packages/shared/src/money/pricing.ts):
+
+```
+server_share_month = min(server_share_cap, shared_fixed_costs_month / active_workspaces)
+usage_month        = storage_gb × storage_rate + emails / 1000 × email_rate
+daily_charge       = (server_share_month + usage_month) × (1 + fee_markup) / days_in_month
+```
+
+Workspaces with no activity in 30 days pay only their storage and email. Rates, the signup credit and top-up limits are versioned rows in `pricing_settings`, changed in the operator admin; the server share cap can only go down (enforced by a database trigger).
+
+| Method | Path | |
+|---|---|---|
+| GET | `/w/:slug/billing` | Balance, a line-by-line cost estimate, how long the credit lasts, ledger and payments |
+| POST | `/w/:slug/billing/topup` | `{amountUsd, saveCard}` → Stripe Checkout URL (admins) |
+| PUT | `/w/:slug/billing/auto-topup` | `{enabled, thresholdUsd, amountUsd, monthlyCapUsd?}` (admins) |
+| POST | `/w/:slug/billing/refund-request` | Ask for a refund of unused paid credit (admins) |
+| GET | `/public/pricing` | Pricing settings, this month's shared costs and active workspaces (no sign-in) |
+| GET | `/public/finances`, `/public/finances.csv` | Public finances: aggregates only, labelled `example: true` until real costs exist |

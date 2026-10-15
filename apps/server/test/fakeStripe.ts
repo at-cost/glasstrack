@@ -38,6 +38,10 @@ export function fakeStripe() {
       if (failCharges) throw new Error("Your card was declined.");
       return { paymentIntentId: `pi_auto_${++n}`, status: "succeeded" };
     },
+    async refund(p) {
+      calls.push({ method: "refund", args: p });
+      return { id: `re_${++n}` };
+    },
     async fetchFee(pi) {
       const fee = fees.get(pi);
       return fee === undefined ? null : { feeCents: fee, netCents: 0 };

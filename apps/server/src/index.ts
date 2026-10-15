@@ -35,11 +35,6 @@ const deps: Deps = {
   limits: { auth: new RateLimiter(10, 15 * 60_000), api: new RateLimiter(600, 60_000) },
 };
 
-if (config.BILLING_ENABLED) {
-  // Seed the price before anything can compare against it.
-  const { currentPriceMicro } = await import("./billing/service");
-  await currentPriceMicro(deps);
-}
 if (config.WORKER_MODE !== "off") await jobs.startWorkers(deps);
 meter.start(dbs.system);
 

@@ -18,10 +18,6 @@ export function formatUsd(micro: number, opts: { precise?: boolean } = {}): stri
   return `${dollars < 0 ? "-" : ""}$${Math.abs(dollars).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 }
 
-/** Flat monthly price charged daily: the same amount every day, 12 months a year. */
-export function dailyCharge(monthlyPriceMicro: number): number {
-  return Math.round((monthlyPriceMicro * 12) / DAYS_PER_YEAR);
-}
 
 /** Storage above the free allowance, billed daily at cost per GB-month. */
 export function storageOverageDaily(storageBytes: number, freeGb: number, ratePerGbMonthMicro: number): number {
@@ -210,3 +206,4 @@ export function dailyShare(amountMicro: number, periodStart: string, periodEnd: 
   const index = Math.round((Date.parse(day) - Date.parse(periodStart)) / 86_400_000);
   return distribute(amountMicro, Array(days).fill(1))[index]!;
 }
+export * from "./pricing";
