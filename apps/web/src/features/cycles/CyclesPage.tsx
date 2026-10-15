@@ -1,10 +1,11 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { Cycle } from "@glasstrack/shared";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ChartLine, Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ConfirmDialog, Dialog } from "../../components/Dialog";
 import { Empty, Skeleton } from "../../components/Feedback";
+import { LineChart } from "../../components/LineChart";
 import { api, errorMessage } from "../../lib/api";
 import { addDays, formatDateRange, todayISO } from "../../lib/format";
 import { paths } from "../../lib/paths";
@@ -28,6 +29,7 @@ export function CyclesPage() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<Cycle | "new" | null>(null);
   const [deleting, setDeleting] = useState<Cycle | null>(null);
+  const [burndown, setBurndown] = useState<Record<string, boolean>>({});
   const isGuest = workspace.role === "guest";
 
   const list = useMemo(
@@ -85,36 +87,51 @@ export function CyclesPage() {
               const s = stats.get(c.id) ?? { total: 0, done: 0 };
               const pct = s.total ? Math.round((s.done / s.total) * 100) : 0;
               return (
-                <li key={c.id} className={`cycle-row${c.completedAt ? " completed" : ""}`}>
-                  <Link to={paths.teamIssues(slug, team.key)} search={{ cycle: c.id }} className="cycle-main">
-                    <span className="cycle-name">
-                      {cycleLabel(c)}
-                      {isActive(c) && <span className="badge badge-accent">Active</span>}
-                      {c.completedAt && <span className="badge">Completed</span>}
-                    </span>
-                    <span className="muted small">{formatDateRange(c.startsOn, c.endsOn)}</span>
-                    <span className="cycle-progress">
-                      <span className="progress">
-                        <span className="progress-fill" style={{ width: `${pct}%` }} />
+                <li key={c.id} className="cycle-item">
+                  <div className={`cycle-row${c.completedAt ? " completed" : ""}`}>
+                    <Link to={paths.teamIssues(slug, team.key)} search={{ cycle: c.id }} className="cycle-main">
+                      <span className="cycle-name">
+                        {cycleLabel(c)}
+                        {isActive(c) && <span className="badge badge-accent">Active</span>}
+                        {c.completedAt && <span className="badge">Completed</span>}
                       </span>
-                      <span className="small">
-                        {s.done}/{s.total} done
+                      <span className="muted small">{formatDateRange(c.startsOn, c.endsOn)}</span>
+                      <span className="cycle-progress">
+                        <span className="progress">
+                          <span className="progress-fill" style={{ width: `${pct}%` }} />
+                        </span>
+                        <span className="small">
+                          {s.done}/{s.total} done
+                        </span>
                       </span>
-                    </span>
-                  </Link>
-                  {canEdit && !isGuest && (
+                    </Link>
                     <span className="cycle-actions">
-                      <button type="button" className="btn btn-sm" onClick={() => complete.mutate({ c, completed: !c.completedAt })}>
-                        {c.completedAt ? "Reopen" : "Complete"}
-                      </button>
-                      <button type="button" className="icon-btn" aria-label={`Edit ${cycleLabel(c)}`} onClick={() => setEditing(c)}>
-                        <Pencil size={14} />
-                      </button>
-                      <button type="button" className="icon-btn" aria-label={`Delete ${cycleLabel(c)}`} onClick={() => setDeleting(c)}>
-                        <Trash2 size={14} />
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        aria-expanded={Boolean(burndown[c.id])}
+                        aria-controls={`burndown-${c.id}`}
+                        onClick={() => setBurndown((b) => ({ ...b, [c.id]: !b[c.id] }))}
+                      >
+                        <ChartLine size={13} aria-hidden="true" />
+                        Burndown
                       </button>
                     </span>
-                  )}
+                    {canEdit && !isGuest && (
+                      <span className="cycle-actions">
+                        <button type="button" className="btn btn-sm" onClick={() => complete.mutate({ c, completed: !c.completedAt })}>
+                          {c.completedAt ? "Reopen" : "Complete"}
+                        </button>
+                        <button type="button" className="icon-btn" aria-label={`Edit ${cycleLabel(c)}`} onClick={() => setEditing(c)}>
+                          <Pencil size={14} />
+                        </button>
+                        <button type="button" className="icon-btn" aria-label={`Delete ${cycleLabel(c)}`} onClick={() => setDeleting(c)}>
+                          <Trash2 size={14} />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                  {burndown[c.id] && <Burndown cycle={c} />}
                 </li>
               );
             })}
@@ -203,5 +220,60 @@ function CycleDialog({ teamId, cycle, onClose }: { teamId: string; cycle: Cycle 
         <button type="submit" hidden />
       </form>
     </Dialog>
+  );
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Remaining work per day against a straight line to zero. Days after today are left empty. */
+function Burndown({ cycle }: { cycle: Cycle }) {
+  const { slug } = useWs();
+  const q = useQuery({ queryKey: [...keys.reportsAll(slug), "cycle", cycle.id], queryFn: () => api.ws(slug).cycleReport(cycle.id) });
+  let body: React.ReactNode;
+  if (q.isPending) body = <Skeleton rows={3} />;
+  else if (q.error) body = <p className="form-error">{errorMessage(q.error)}</p>;
+  else if (q.data.days.length === 0)
+    body = (
+      <p className="muted small">
+        This cycle starts {formatDateRange(cycle.startsOn, cycle.endsOn).split(" to ")[0]}. The chart fills in from then.
+      </p>
+    );
+  else {
+    const r = q.data;
+    const unit = r.unit;
+    const total = Math.max(r.totalDays, r.days.length);
+    const startScope = r.days[0]!.scope;
+    const days = Array.from({ length: total }, (_, i) => addDays(cycle.startsOn, i));
+    const at = (i: number) => r.days[i];
+    const ideal = days.map((_, i) => at(i)?.ideal ?? Math.max(0, round1(startScope * (1 - i / Math.max(1, total - 1)))));
+    const scopeTotal = r.days[r.days.length - 1]!.scope;
+    body =
+      scopeTotal === 0 ? (
+        <p className="muted small">No issues in this cycle yet.</p>
+      ) : (
+        <>
+          <p className="muted small">
+            Remaining {unit} each day against a steady pace to zero. Scope is everything in the cycle
+            {unit === "points" ? ", counted by estimate" : ""}.
+          </p>
+          <LineChart
+            title={`Burndown in ${unit}`}
+            days={days}
+            series={[
+              { key: "remaining", label: "Remaining", color: "var(--series-1)", values: days.map((_, i) => at(i)?.remaining ?? null) },
+              { key: "ideal", label: "Ideal", color: "var(--chart-ref)", values: ideal, dashed: true },
+              { key: "scope", label: "Scope", color: "var(--series-2)", values: days.map((_, i) => at(i)?.scope ?? null), opacity: 0.45 },
+            ]}
+            format={(v) => `${round1(v)} ${unit === "points" ? (v === 1 ? "point" : "points") : v === 1 ? "issue" : "issues"}`}
+            axisFormat={(v) => String(round1(v))}
+            height={220}
+          />
+        </>
+      );
+  }
+  return (
+    <section className="burndown" id={`burndown-${cycle.id}`} aria-label={`${cycleLabel(cycle)} burndown`}>
+      {body}
+    </section>
   );
 }

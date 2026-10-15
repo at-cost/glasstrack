@@ -9,6 +9,8 @@ import { IssueDetailPage } from "./features/issue/IssueDetail";
 import { MyIssuesPage, TeamBacklogPage, TeamBoardPage, TeamIssuesPage, ViewPage } from "./features/issues/pages";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { TimePage } from "./features/time/TimePage";
+import { ReportsPage } from "./features/reports/ReportsPage";
+import { TimelinePage } from "./features/timeline/TimelinePage";
 import { WorkspaceIndex, WorkspaceLayout } from "./features/shell/AppShell";
 
 function Root() {
@@ -63,9 +65,11 @@ const routeTree = rootRoute.addChildren([
     child("team/$teamKey/board", TeamBoardPage),
     child("team/$teamKey/backlog", TeamBacklogPage),
     child("team/$teamKey/cycles", CyclesPage),
+    child("team/$teamKey/timeline", TimelinePage),
     child("view/$viewId", ViewPage),
     child("issue/$identifier", IssueDetailPage),
     child("time", TimePage),
+    child("reports", ReportsPage),
     child("settings", SettingsPage),
     child("settings/$tab", SettingsPage),
   ]),

@@ -50,8 +50,11 @@ export function FilterBar({
   savedFilter,
   layout,
   extra,
+  canSave = true,
 }: {
   teamId?: string;
+  /** Saved views only store list and board layouts. */
+  canSave?: boolean;
   hide?: ("status" | "assignee" | "cycle")[];
   /** The full filter (base + URL) used when saving a view. */
   savedFilter: IssueFilter;
@@ -296,7 +299,7 @@ export function FilterBar({
       )}
       <span className="filter-spacer" />
       {extra}
-      {workspace.status !== "read_only" && (
+      {canSave && workspace.status !== "read_only" && (
         <button type="button" className="btn btn-sm" onClick={() => setSaving(true)}>
           <Save size={13} aria-hidden="true" />
           Save view

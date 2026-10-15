@@ -5,11 +5,14 @@ export interface Series {
   label: string;
   /** CSS color, usually a var(--series-n) token. */
   color: string;
-  values: number[];
+  /** null leaves a gap (for example, days that have not happened yet). */
+  values: (number | null)[];
   dashed?: boolean;
+  /** 0 to 1. */
+  opacity?: number;
 }
 
-function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
+export function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
   const ref = useRef<T>(null);
   const [w, setW] = useState(600);
   useEffect(() => {
@@ -24,9 +27,8 @@ function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] 
   return [ref, w];
 }
 
-/** Rounds the max up to a tidy number and returns 4 evenly spaced ticks from 0. */
 /** Round tick values covering [min, max]; includes 0 and handles negatives (e.g. a reserve below zero). */
-function niceTicks(min: number, max: number): number[] {
+export function niceTicks(min: number, max: number): number[] {
   const lo = Math.min(0, min);
   const hi = Math.max(0, max);
   if (hi - lo <= 0) return [0, 1];
@@ -40,7 +42,7 @@ function niceTicks(min: number, max: number): number[] {
   return ticks;
 }
 
-const shortDate = (d: string) => {
+export const shortDate = (d: string) => {
   const [y, m, day] = d.split("-").map(Number);
   return new Date(y!, (m ?? 1) - 1, day ?? 1).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
@@ -74,7 +76,8 @@ export function LineChart({
   const bottom = 26;
   const plotW = Math.max(40, width - left - right);
   const plotH = height - top - bottom;
-  const all = series.flatMap((s) => s.values);
+  const all = series.flatMap((s) => s.values).filter((v): v is number => v !== null);
+  const fmt = (v: number | null | undefined) => (v === null || v === undefined ? "No data" : format(v));
   const ticks = niceTicks(Math.min(0, ...all), Math.max(0, ...all));
   const yMin = ticks[0]!;
   const yMax = ticks[ticks.length - 1]!;
@@ -106,12 +109,12 @@ export function LineChart({
 
   const last = n - 1;
   const valueText = (i: number) =>
-    i < 0 || i >= n ? "No data" : `${shortDate(days[i]!)}: ${series.map((s) => `${s.label} ${format(s.values[i] ?? 0)}`).join(", ")}`;
+    i < 0 || i >= n ? "No data" : `${shortDate(days[i]!)}: ${series.map((s) => `${s.label} ${fmt(s.values[i])}`).join(", ")}`;
   const summary =
     n === 0
       ? `${title}: no data yet.`
       : `${title}, ${shortDate(days[0]!)} to ${shortDate(days[last]!)}. Latest: ${series
-          .map((s) => `${s.label} ${format(s.values[last] ?? 0)}`)
+          .map((s) => `${s.label} ${fmt(lastValue(s.values))}`)
           .join(", ")}.`;
   const tipLeft = active === null ? 0 : Math.min(Math.max(x(active) - 80, 0), Math.max(0, width - 170));
 
@@ -124,7 +127,16 @@ export function LineChart({
             {series.map((s) => (
               <li key={s.key}>
                 <svg width="18" height="8" aria-hidden="true">
-                  <line x1="1" y1="4" x2="17" y2="4" stroke={s.color} strokeWidth="2.5" strokeDasharray={s.dashed ? "4 3" : undefined} />
+                  <line
+                    x1="1"
+                    y1="4"
+                    x2="17"
+                    y2="4"
+                    stroke={s.color}
+                    strokeOpacity={s.opacity}
+                    strokeWidth="2.5"
+                    strokeDasharray={s.dashed ? "4 3" : undefined}
+                  />
                 </svg>
                 {s.label}
               </li>
@@ -175,35 +187,40 @@ export function LineChart({
               </text>
             ))}
           {series.map((s) =>
-            n === 1 ? (
-              <circle key={s.key} cx={x(0)} cy={y(s.values[0] ?? 0)} r={4} fill={s.color} />
-            ) : (
-              <polyline
-                key={s.key}
-                fill="none"
-                stroke={s.color}
-                strokeWidth={2}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                strokeDasharray={s.dashed ? "5 4" : undefined}
-                points={s.values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")}
-              />
+            segments(s.values).map((seg) =>
+              seg.length === 1 ? (
+                <circle key={`${s.key}-${seg[0]}`} cx={x(seg[0]!)} cy={y(s.values[seg[0]!]!)} r={3} fill={s.color} opacity={s.opacity} />
+              ) : (
+                <polyline
+                  key={`${s.key}-${seg[0]}`}
+                  fill="none"
+                  stroke={s.color}
+                  strokeOpacity={s.opacity}
+                  strokeWidth={2}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  strokeDasharray={s.dashed ? "5 4" : undefined}
+                  points={seg.map((i) => `${x(i).toFixed(1)},${y(s.values[i]!).toFixed(1)}`).join(" ")}
+                />
+              ),
             ),
           )}
           {active !== null && (
             <g>
               <line x1={x(active)} x2={x(active)} y1={top} y2={top + plotH} className="chart-cross" />
-              {series.map((s) => (
-                <circle
-                  key={s.key}
-                  cx={x(active)}
-                  cy={y(s.values[active] ?? 0)}
-                  r={4.5}
-                  fill={s.color}
-                  stroke="var(--surface)"
-                  strokeWidth={2}
-                />
-              ))}
+              {series.map((s) =>
+                s.values[active] === null || s.values[active] === undefined ? null : (
+                  <circle
+                    key={s.key}
+                    cx={x(active)}
+                    cy={y(s.values[active]!)}
+                    r={4.5}
+                    fill={s.color}
+                    stroke="var(--surface)"
+                    strokeWidth={2}
+                  />
+                ),
+              )}
             </g>
           )}
         </svg>
@@ -214,7 +231,7 @@ export function LineChart({
               {series.map((s) => (
                 <span key={s.key} className="chart-tip-row">
                   <span className="chart-swatch" style={{ background: s.color }} aria-hidden="true" />
-                  {s.label}: {format(s.values[active] ?? 0)}
+                  {s.label}: {fmt(s.values[active])}
                 </span>
               ))}
             </>
@@ -238,7 +255,7 @@ export function LineChart({
             <tr key={d}>
               <th scope="row">{d}</th>
               {series.map((s) => (
-                <td key={s.key}>{format(s.values[i] ?? 0)}</td>
+                <td key={s.key}>{fmt(s.values[i])}</td>
               ))}
             </tr>
           ))}
@@ -246,4 +263,23 @@ export function LineChart({
       </table>
     </figure>
   );
+}
+
+/** Index runs without nulls. */
+function segments(values: (number | null)[]): number[][] {
+  const out: number[][] = [];
+  let cur: number[] = [];
+  values.forEach((v, i) => {
+    if (v === null || v === undefined) {
+      if (cur.length) out.push(cur);
+      cur = [];
+    } else cur.push(i);
+  });
+  if (cur.length) out.push(cur);
+  return out;
+}
+
+function lastValue(values: (number | null)[]): number | null {
+  for (let i = values.length - 1; i >= 0; i--) if (values[i] !== null && values[i] !== undefined) return values[i]!;
+  return null;
 }

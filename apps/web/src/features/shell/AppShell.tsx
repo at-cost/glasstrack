@@ -23,6 +23,8 @@ import {
   Eye,
   Clock,
   KeyRound,
+  ChartColumn,
+  ChartGantt,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -304,6 +306,9 @@ function Sidebar() {
                     <NavLink to={paths.teamCycles(slug, t.key)} icon={<RefreshCw size={15} />}>
                       Cycles
                     </NavLink>
+                    <NavLink to={paths.teamTimeline(slug, t.key)} icon={<ChartGantt size={15} />}>
+                      Timeline
+                    </NavLink>
                   </div>
                 )}
               </div>
@@ -325,6 +330,9 @@ function Sidebar() {
         <TimerPill />
         <NavLink to={paths.time(slug)} icon={<Clock size={16} />}>
           Time
+        </NavLink>
+        <NavLink to={paths.reports(slug)} icon={<ChartColumn size={16} />}>
+          Reports
         </NavLink>
         <NavLink to={paths.settings(slug)} icon={<Settings size={16} />}>
           Settings

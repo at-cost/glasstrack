@@ -41,7 +41,8 @@ export async function createNotifications(
   p: {
     workspaceId: string;
     issueId: string;
-    actorId: string;
+    /** null = done by an automation (see data.rule). */
+    actorId: string | null;
     kind: NotificationKind;
     userIds: string[];
     data?: Record<string, unknown>;

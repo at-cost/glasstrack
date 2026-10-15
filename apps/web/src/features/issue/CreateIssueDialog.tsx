@@ -31,6 +31,7 @@ export function CreateIssueDialog({ defaults, onClose }: { defaults: CreateDefau
   const [assigneeIds, setAssigneeIds] = useState<string[]>(defaults.assigneeIds ?? []);
   const [labelIds, setLabelIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [estimate, setEstimate] = useState<number | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [templateId, setTemplateId] = useState<string | null>(null);
@@ -90,8 +91,15 @@ export function CreateIssueDialog({ defaults, onClose }: { defaults: CreateDefau
       setError("Add a title.");
       return;
     }
+    // Teams may still be loading right after sign-up; wait for them instead of failing.
+    if (teams.isPending) return;
     if (!teamId) {
       setError("Pick a team.");
+      return;
+    }
+    if (startDate && dueDate && startDate > dueDate) {
+      setError("The start date must be on or before the due date.");
+      setMoreOpen(true);
       return;
     }
     create.mutate(
@@ -104,6 +112,7 @@ export function CreateIssueDialog({ defaults, onClose }: { defaults: CreateDefau
         assigneeIds,
         labelIds,
         dueDate: dueDate || null,
+        startDate: startDate || null,
         estimate,
         parentId: defaults.parentId ?? null,
         fields: Object.fromEntries(teamFields.filter((f) => !isEmptyValue(values[f.id])).map((f) => [f.id, values[f.id]])),
@@ -134,7 +143,7 @@ export function CreateIssueDialog({ defaults, onClose }: { defaults: CreateDefau
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="btn btn-primary" onClick={submit} disabled={!canEdit || create.isPending}>
+          <button type="button" className="btn btn-primary" onClick={submit} disabled={!canEdit || create.isPending || teams.isPending}>
             Create issue
           </button>
         </>
@@ -254,38 +263,73 @@ export function CreateIssueDialog({ defaults, onClose }: { defaults: CreateDefau
           <label className="chip-btn date-chip">
             <Calendar size={14} aria-hidden="true" />
             <span className="sr-only">Due date</span>
-            <input type="date" className="date-input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} aria-label="Due date" />
+            <input
+              type="date"
+              className="date-input"
+              value={dueDate}
+              min={startDate || undefined}
+              onChange={(e) => {
+                setDueDate(e.target.value);
+                setError(null);
+              }}
+              aria-label="Due date"
+            />
           </label>
         </div>
-        {teamFields.length > 0 && (
-          <div className="more-fields">
-            <button type="button" className="btn btn-ghost btn-sm" aria-expanded={moreOpen} aria-controls="create-more-fields" onClick={() => setMoreOpen((o) => !o)}>
-              {moreOpen ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
-              More fields
-              {filledFields > 0 && <span className="group-count">{filledFields} set</span>}
-            </button>
-            {moreOpen && (
-              <div className="more-fields-grid" id="create-more-fields">
-                {teamFields.map((f) => (
-                  <div key={f.id} className="prop-row">
-                    <span className="prop-label" title={f.name}>
-                      {f.name}
-                    </span>
-                    <div className="prop-value">
-                      <FieldEditor
-                        field={f}
-                        value={values[f.id]}
-                        members={members.data}
-                        meId={me.id}
-                        onChange={(v) => setValues((cur) => ({ ...cur, [f.id]: v }))}
-                      />
-                    </div>
-                  </div>
-                ))}
+        <div className="more-fields">
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            aria-expanded={moreOpen}
+            aria-controls="create-more-fields"
+            onClick={() => setMoreOpen((o) => !o)}
+          >
+            {moreOpen ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+            More
+            {filledFields + (startDate ? 1 : 0) > 0 && <span className="group-count">{filledFields + (startDate ? 1 : 0)} set</span>}
+          </button>
+          {moreOpen && (
+            <div className="more-fields-grid" id="create-more-fields">
+              <div className="prop-row">
+                <label className="prop-label" htmlFor="create-start-date">
+                  Start date
+                </label>
+                <div className="prop-value">
+                  <span className="prop-btn date-prop">
+                    <Calendar size={14} aria-hidden="true" />
+                    <input
+                      id="create-start-date"
+                      type="date"
+                      className="date-input"
+                      value={startDate}
+                      max={dueDate || undefined}
+                      onChange={(e) => {
+                        setStartDate(e.target.value);
+                        setError(null);
+                      }}
+                    />
+                  </span>
+                </div>
               </div>
-            )}
-          </div>
-        )}
+              {teamFields.map((f) => (
+                <div key={f.id} className="prop-row">
+                  <span className="prop-label" title={f.name}>
+                    {f.name}
+                  </span>
+                  <div className="prop-value">
+                    <FieldEditor
+                      field={f}
+                      value={values[f.id]}
+                      members={members.data}
+                      meId={me.id}
+                      onChange={(v) => setValues((cur) => ({ ...cur, [f.id]: v }))}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       {defaults.parentId && <p className="muted small">This issue will be a sub-issue.</p>}
     </Dialog>

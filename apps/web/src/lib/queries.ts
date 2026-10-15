@@ -38,6 +38,10 @@ export const keys = {
   timeReportAll: (slug: string) => ["time-report", slug] as const,
   audit: (slug: string, action: string) => ["audit", slug, action] as const,
   sso: (slug: string) => ["sso", slug] as const,
+  relations: (slug: string, teamId: string) => ["relations", slug, teamId] as const,
+  reportsAll: (slug: string) => ["reports", slug] as const,
+  automations: (slug: string) => ["automations", slug] as const,
+  automationRuns: (slug: string, id: string) => ["automation-runs", slug, id] as const,
   operator: ["operator"] as const,
   adminOverview: ["admin-overview"] as const,
   publicFinances: ["public-finances"] as const,
@@ -130,8 +134,11 @@ export function invalidateFor(qc: QueryClient, slug: string, events: { t: string
           });
           qc.invalidateQueries({ queryKey: keys.activity(slug, e.id) });
           qc.invalidateQueries({ queryKey: keys.timeEntries(slug, e.id) });
+          // Automations add comments without a comment event.
+          qc.invalidateQueries({ queryKey: keys.comments(slug, e.id) });
         });
         once("timer", () => qc.invalidateQueries({ queryKey: keys.timer(slug) }));
+        once("relations", () => qc.invalidateQueries({ queryKey: ["relations", slug] }));
         once("notifications", () => qc.invalidateQueries({ queryKey: keys.notifications(slug) }));
         break;
       case "comment":

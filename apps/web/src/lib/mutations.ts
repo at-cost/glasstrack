@@ -164,6 +164,7 @@ export function useCreateIssue(slug: string, meId: string | undefined) {
         parentId: b.parentId ?? null,
         cycleId: b.cycleId ?? null,
         dueDate: b.dueDate ?? null,
+        startDate: b.startDate ?? null,
         estimate: b.estimate ?? null,
         sortKey: "zzzzzz",
         labelIds: b.labelIds ?? [],

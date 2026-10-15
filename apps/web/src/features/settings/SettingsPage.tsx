@@ -38,6 +38,7 @@ import { Fields } from "./Fields";
 import { InlineText } from "./InlineText";
 import { Sso } from "./Sso";
 import { Templates } from "./Templates";
+import { Automations } from "./Automations";
 
 const ALL_TABS = [
   { id: "general", label: "General" },
@@ -45,6 +46,7 @@ const ALL_TABS = [
   { id: "teams", label: "Teams" },
   { id: "fields", label: "Fields" },
   { id: "templates", label: "Templates" },
+  { id: "automations", label: "Automations" },
   { id: "notifications", label: "Notifications" },
   { id: "profile", label: "Profile" },
   { id: "billing", label: "Billing" },
@@ -138,6 +140,7 @@ export function SettingsPage() {
               {tab === "github" && <GitHub />}
               {tab === "fields" && <Fields />}
               {tab === "templates" && <Templates />}
+              {tab === "automations" && <Automations />}
               {tab === "sso" && <Sso />}
               {tab === "audit" && <AuditLog />}
               {tab === "import" && <Import />}

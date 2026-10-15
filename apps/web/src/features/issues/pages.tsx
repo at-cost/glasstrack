@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import type { IssueFilter, Team } from "@glasstrack/shared";
-import { Columns3, ListTodo, Plus, Trash2 } from "lucide-react";
+import { ChartGantt, Columns3, ListTodo, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { ConfirmDialog } from "../../components/Dialog";
 import { Empty, Skeleton } from "../../components/Feedback";
@@ -87,12 +87,12 @@ export function useTeamByKey(): { team: Team | undefined; loading: boolean } {
   return { team: teams.data?.find((t) => t.key.toLowerCase() === teamKey?.toLowerCase()), loading: teams.isPending };
 }
 
-function TeamMissing({ loading }: { loading: boolean }) {
+export function TeamMissing({ loading }: { loading: boolean }) {
   if (loading) return <Skeleton />;
   return <Empty title="Team not found">It may have been archived or renamed.</Empty>;
 }
 
-function TeamLayoutSwitch({ team, current }: { team: Team; current: "list" | "board" }) {
+export function TeamLayoutSwitch({ team, current }: { team: Team; current: "list" | "board" | "timeline" }) {
   const { slug } = useWs();
   const search = useSearch({ strict: false }) as Record<string, unknown>;
   const keep = filterToSearch(searchToFilter(search as never));
@@ -116,6 +116,15 @@ function TeamLayoutSwitch({ team, current }: { team: Team; current: "list" | "bo
       >
         <Columns3 size={14} aria-hidden="true" />
         <span className="sr-only">Show as columns</span>
+      </Link>
+      <Link
+        to={paths.teamTimeline(slug, team.key)}
+        search={keep}
+        className={`seg${current === "timeline" ? " active" : ""}`}
+        aria-current={current === "timeline" ? "page" : undefined}
+      >
+        <ChartGantt size={14} aria-hidden="true" />
+        <span className="sr-only">Show as timeline</span>
       </Link>
     </fieldset>
   );

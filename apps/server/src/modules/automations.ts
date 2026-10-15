@@ -82,7 +82,6 @@ async function snapshot(trx: Tx, issueId: string): Promise<(IssueSnapshot & { id
 /** Applies one rule's actions. Returns a short description of what changed. */
 async function applyActions(trx: Tx, workspaceId: string, issueId: string, rule: RuleRow): Promise<string[]> {
   const done: string[] = [];
-  const actor = rule.createdBy ?? null;
   for (const a of rule.actions as AutomationAction[]) {
     const cur = await snapshot(trx, issueId);
     if (!cur || cur.archivedAt) break;
@@ -125,7 +124,7 @@ async function applyActions(trx: Tx, workspaceId: string, issueId: string, rule:
         const { added, removed } = await setAssignees(trx, workspaceId, issueId, next);
         if (!added.length && !removed.length) break;
         await recordActivity(trx, workspaceId, issueId, null, "assignees", { added, removed, via: "automation", rule: rule.name });
-        if (actor) await createNotifications(trx, { workspaceId, issueId, actorId: actor, kind: "assigned", userIds: added });
+        await createNotifications(trx, { workspaceId, issueId, actorId: null, kind: "assigned", userIds: added, data: { via: "automation", rule: rule.name } });
         done.push("assignees");
         break;
       }

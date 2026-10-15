@@ -248,6 +248,20 @@ export function Properties({ issue }: { issue: IssueDetail }) {
           {cycle ? cycleLabel(cycle) : <span className="muted">No cycle</span>}
         </PickerButton>
       </Row>
+      <Row label="Start date">
+        <label className="prop-btn date-prop">
+          <Calendar size={14} aria-hidden="true" />
+          <input
+            type="date"
+            className="date-input"
+            aria-label="Start date"
+            value={issue.startDate ?? ""}
+            max={issue.dueDate ?? undefined}
+            disabled={disabled}
+            onChange={(e) => update.mutate({ issue, patch: { startDate: e.target.value || null } })}
+          />
+        </label>
+      </Row>
       <Row label="Due date">
         <label className="prop-btn date-prop">
           <Calendar size={14} aria-hidden="true" />
@@ -256,6 +270,7 @@ export function Properties({ issue }: { issue: IssueDetail }) {
             className="date-input"
             aria-label="Due date"
             value={issue.dueDate ?? ""}
+            min={issue.startDate ?? undefined}
             disabled={disabled}
             onChange={(e) => update.mutate({ issue, patch: { dueDate: e.target.value || null } })}
           />

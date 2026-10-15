@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type Activity, type Comment, type IssueDetail, type Member, PRIORITY_LABELS, type Priority } from "@glasstrack/shared";
-import { Pencil, Trash2 } from "lucide-react";
+import { Bot, Pencil, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ConfirmDialog } from "../../components/Dialog";
 import { Avatar } from "../../components/icons";
@@ -20,6 +20,7 @@ const SOURCE_NAME: Record<string, string> = { linear: "Linear", jira: "Jira", tr
 function actorName(a: Activity, name: string | undefined): string {
   if (a.actorId === null) {
     const d = a.data as Record<string, unknown>;
+    if (d.via === "automation" || a.kind === "automation_comment") return d.rule ? `Automation "${String(d.rule)}"` : "Automation";
     if (a.kind === "pr_linked" || a.kind === "pr_merged" || d.via === "github") return "GitHub";
     return "Glasstrack";
   }
@@ -99,6 +100,10 @@ function useDescribe() {
         if (Array.isArray(d.removed) && d.removed.length) parts.push(`removed ${labelNames(d.removed)}`);
         return parts.join(" and ") || "changed labels";
       }
+      case "start_date":
+        return d.to ? `set the start date to ${formatDueDate(String(d.to))}` : "removed the start date";
+      case "automation_comment":
+        return "added a comment";
       case "due_date":
         return d.to ? `set the due date to ${formatDueDate(String(d.to))}` : "removed the due date";
       case "estimate":
@@ -205,7 +210,9 @@ function CommentItem({ comment, issueId, author, members }: { comment: Comment; 
     },
     onSettled: () => qc.invalidateQueries({ queryKey: key }),
   });
-  const mine = comment.authorId === me.id;
+  const automated = !comment.authorId;
+  const authorName = automated ? "Automation" : (author?.name ?? "Former member");
+  const mine = !automated && comment.authorId === me.id;
   const pending = comment.id.startsWith("temp-");
   const save = () => {
     const b = draft.trim();
@@ -217,11 +224,17 @@ function CommentItem({ comment, issueId, author, members }: { comment: Comment; 
     <article
       className={`comment${pending ? " pending" : ""}`}
       data-testid="comment"
-      aria-label={`Comment by ${author?.name ?? "a former member"}`}
+      aria-label={`Comment by ${automated ? "Automation" : (author?.name ?? "a former member")}`}
     >
       <header className="comment-head">
-        <Avatar member={author ?? { name: "?", avatarUrl: null }} size={22} />
-        <strong>{author?.name ?? "Former member"}</strong>
+        {automated ? (
+          <span className="avatar automation-avatar" style={{ width: 22, height: 22 }} aria-hidden="true">
+            <Bot size={14} />
+          </span>
+        ) : (
+          <Avatar member={author ?? { name: "?", avatarUrl: null }} size={22} />
+        )}
+        <strong>{authorName}</strong>
         <time dateTime={comment.createdAt} title={fullTime(comment.createdAt)} className="tl-time">
           {relativeTime(comment.createdAt)}
         </time>

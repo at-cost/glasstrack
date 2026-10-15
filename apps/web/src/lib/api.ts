@@ -1,5 +1,6 @@
 import type {
   Activity,
+  AutomationRule,
   AuditEntry,
   Comment,
   CustomField,
@@ -110,6 +111,7 @@ export type IssueCreate = {
   fields?: Record<string, unknown>;
   templateId?: string;
   labelIds?: string[];
+  startDate?: string | null;
   dueDate?: string | null;
   estimate?: number | null;
   parentId?: string | null;
@@ -227,6 +229,46 @@ export interface GithubIntegration {
   webhookUrl: string;
   secret?: string;
   moveOnMerge?: boolean;
+}
+
+export interface RelationLink {
+  id: string;
+  /** The blocker. */
+  issueId: string;
+  /** The blocked issue. */
+  relatedIssueId: string;
+  type: string;
+}
+
+export interface Percentiles {
+  p50: number | null;
+  p75: number | null;
+  p90: number | null;
+}
+export interface ReportOverview {
+  completed: number;
+  cycleTimeHours: Percentiles;
+  leadTimeHours: Percentiles;
+  cycleTimeHistogram: { bucket: string; count: number }[];
+  weekly: { week: string; created: number; completed: number; open: number }[];
+  byAssignee: { userId: string | null; completed: number }[];
+  byLabel: { labelId: string; completed: number }[];
+}
+export interface CycleReport {
+  cycle: { id: string; teamId: string; number: number; name: string | null; startsOn: string; endsOn: string; completedAt: string | null };
+  unit: "points" | "issues";
+  totalDays: number;
+  days: { day: string; scope: number; completed: number; remaining: number; ideal: number }[];
+}
+
+export type AutomationInput = Pick<AutomationRule, "name" | "teamId" | "enabled" | "trigger" | "triggerConfig" | "conditions" | "actions">;
+export interface AutomationRun {
+  id: string;
+  status: "ok" | "error";
+  detail: { changed?: string[]; error?: string } | null;
+  createdAt: string;
+  issueId: string | null;
+  identifier: string | null;
 }
 
 export interface FinanceDay {
@@ -365,6 +407,20 @@ export const api = {
       subscribe: (ref: string, subscribed: boolean) => put<{ subscribed: boolean }>(`${w}/issues/${enc(ref)}/subscription`, { subscribed }),
       activity: (ref: string) => get<Activity[]>(`${w}/issues/${enc(ref)}/activity`),
       search: (q: string) => get<SearchResult>(`${w}/search?q=${enc(q)}`),
+      relations: (teamId: string, type = "blocks") => get<RelationLink[]>(`${w}/relations?team=${enc(teamId)}&type=${enc(type)}`),
+
+      reportOverview: (q: { from: string; to: string; team?: string }) => {
+        const p = new URLSearchParams({ from: q.from, to: q.to });
+        if (q.team) p.set("team", q.team);
+        return get<ReportOverview>(`${w}/reports/overview?${p}`);
+      },
+      cycleReport: (id: string) => get<CycleReport>(`${w}/reports/cycles/${enc(id)}`),
+
+      automations: () => get<AutomationRule[]>(`${w}/automations`),
+      createAutomation: (b: AutomationInput) => post<AutomationRule>(`${w}/automations`, b),
+      updateAutomation: (id: string, b: Partial<AutomationInput>) => patch<AutomationRule>(`${w}/automations/${id}`, b),
+      deleteAutomation: (id: string) => del<{ ok: true }>(`${w}/automations/${id}`),
+      automationRuns: (id: string) => get<AutomationRun[]>(`${w}/automations/${id}/runs`),
 
       comments: (ref: string) => get<Comment[]>(`${w}/issues/${enc(ref)}/comments`),
       addComment: (ref: string, body: string) => post<Comment>(`${w}/issues/${enc(ref)}/comments`, { body }),
