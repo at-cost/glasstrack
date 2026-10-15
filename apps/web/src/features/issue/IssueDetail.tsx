@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import type { IssueDetail, IssueLink, IssueRelation } from "@glasstrack/shared";
-import { Archive, Bell, BellOff, ChevronRight, Copy, Ellipsis, ExternalLink, FileText, GitPullRequest, Link2, Paperclip, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { Archive, Bell, BellOff, ChevronRight, Copy, Ellipsis, ExternalLink, FileText, GitMerge, GitPullRequest, Link2, Paperclip, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "../../components/Dialog";
 import { Empty, Skeleton, Spinner } from "../../components/Feedback";
@@ -427,28 +427,33 @@ function Relations({ issue }: { issue: IssueDetail }) {
 }
 
 const PR_STATE: Record<IssueLink["state"], string> = { open: "Open", merged: "Merged", closed: "Closed" };
+export const PROVIDER_NAME: Record<IssueLink["provider"], string> = { github: "GitHub", gitlab: "GitLab", gitea: "Gitea" };
 
 function PullRequests({ issue }: { issue: IssueDetail }) {
-  const links = (issue.links ?? []).filter((l) => l.provider === "github");
+  const links = issue.links ?? [];
   if (links.length === 0) return null;
+  const hasMr = links.some((l) => l.provider === "gitlab");
+  const hasPr = links.some((l) => l.provider !== "gitlab");
+  const heading = hasMr && hasPr ? "Pull and merge requests" : hasMr ? "Merge requests" : "Pull requests";
   return (
     <section className="detail-section" aria-labelledby="prs-title">
       <div className="section-head">
         <h2 className="section-title" id="prs-title">
-          Pull requests <span className="group-count">{links.length}</span>
+          {heading} <span className="group-count">{links.length}</span>
         </h2>
       </div>
       <ul className="mini-list">
         {links.map((l) => (
           <li key={l.id} className="mini-row-wrap">
             <span className={`pr-state pr-${l.state}`}>
-              <GitPullRequest size={12} aria-hidden="true" />
+              {l.state === "merged" ? <GitMerge size={12} aria-hidden="true" /> : <GitPullRequest size={12} aria-hidden="true" />}
               {PR_STATE[l.state] ?? l.state}
             </span>
             <a href={l.url} target="_blank" rel="noreferrer" className="mini-row">
+              <span className={`provider-tag provider-${l.provider}`}>{PROVIDER_NAME[l.provider] ?? l.provider}</span>
               <span className="issue-title">{l.title}</span>
               <ExternalLink size={12} aria-hidden="true" />
-              <span className="sr-only">(opens GitHub)</span>
+              <span className="sr-only">(opens {PROVIDER_NAME[l.provider] ?? "in a new tab"})</span>
             </a>
           </li>
         ))}

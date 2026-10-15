@@ -11,6 +11,7 @@ import { toast, toastError } from "../../lib/toast";
 import { FIELD_TYPE_LABEL } from "../issue/fields";
 import { useWs } from "../shell/context";
 import { InlineText } from "./InlineText";
+import { teamOptionLabel } from "../../components/icons";
 
 type FieldOption = CustomField["options"][number];
 
@@ -347,7 +348,7 @@ function NewField() {
               <option value="">All teams</option>
               {teams.data?.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name} only
+                  {teamOptionLabel(t)} only
                 </option>
               ))}
             </select>

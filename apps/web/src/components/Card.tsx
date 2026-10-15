@@ -7,7 +7,7 @@ export function Card({
   actions,
   id,
 }: {
-  title: string;
+  title: ReactNode;
   children: ReactNode;
   danger?: boolean;
   actions?: ReactNode;

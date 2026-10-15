@@ -6,6 +6,9 @@ export interface WsContext {
   workspace: Workspace;
   me: Me;
   isAdmin: boolean;
+  /** Read-only, free role: sees what members see, changes nothing. */
+  isViewer: boolean;
+  /** False for viewers and while the workspace is read-only. */
   canEdit: boolean;
 }
 

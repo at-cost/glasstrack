@@ -15,6 +15,8 @@ export function dismissToast(id: number) {
 }
 
 export function toast(message: string, kind: Toast["kind"] = "info") {
+  // The same message twice at once (a global handler and a local one) shows once.
+  if (toastStore.get().some((t) => t.message === message && t.kind === kind)) return;
   const id = next++;
   toastStore.set((list) => [...list.slice(-3), { id, kind, message }]);
   setTimeout(() => dismissToast(id), kind === "error" ? 7000 : 4000);

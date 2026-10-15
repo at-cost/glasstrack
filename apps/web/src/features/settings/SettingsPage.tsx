@@ -7,7 +7,6 @@ import {
   type Member,
   NOTIFICATION_KINDS,
   type NotificationSettings,
-  ROLES,
   type Role,
   STATE_CATEGORIES,
   type StateCategory,
@@ -19,7 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { Card } from "../../components/Card";
 import { ConfirmDialog, Dialog } from "../../components/Dialog";
 import { Empty, Skeleton, Spinner } from "../../components/Feedback";
-import { Avatar, LabelDot, StatusIcon } from "../../components/icons";
+import { Avatar, LabelDot, LockIcon, StatusIcon } from "../../components/icons";
 import { ApiError, api, errorMessage } from "../../lib/api";
 import { fullTime, relativeTime } from "../../lib/format";
 import { paths } from "../../lib/paths";
@@ -39,6 +38,8 @@ import { InlineText } from "./InlineText";
 import { Sso } from "./Sso";
 import { Templates } from "./Templates";
 import { Automations } from "./Automations";
+import { GitForge } from "./GitForge";
+import { Requests } from "./Requests";
 
 const ALL_TABS = [
   { id: "general", label: "General" },
@@ -47,12 +48,15 @@ const ALL_TABS = [
   { id: "fields", label: "Fields" },
   { id: "templates", label: "Templates" },
   { id: "automations", label: "Automations" },
+  { id: "requests", label: "Requests" },
   { id: "notifications", label: "Notifications" },
   { id: "profile", label: "Profile" },
   { id: "billing", label: "Billing" },
   { id: "tokens", label: "API tokens" },
   { id: "webhooks", label: "Webhooks" },
   { id: "github", label: "GitHub" },
+  { id: "gitlab", label: "GitLab" },
+  { id: "gitea", label: "Gitea and Forgejo" },
   { id: "sso", label: "Single sign-on" },
   { id: "audit", label: "Audit log" },
   { id: "import", label: "Import" },
@@ -68,8 +72,9 @@ export function SettingsPage() {
   const billing = useBilling(slug);
   const tabs = ALL_TABS.filter((t) => {
     if (t.id === "billing") return billing.data?.enabled === true;
-    if (t.id === "webhooks" || t.id === "github" || t.id === "fields" || t.id === "sso" || t.id === "audit") return isAdmin;
-    if (t.id === "import" || t.id === "tokens" || t.id === "templates") return workspace.role !== "guest";
+    if (["webhooks", "github", "gitlab", "gitea", "fields", "sso", "audit"].includes(t.id)) return isAdmin;
+    if (t.id === "import" || t.id === "tokens" || t.id === "requests") return workspace.role === "admin" || workspace.role === "member";
+    if (t.id === "templates") return workspace.role !== "guest";
     return true;
   });
   const wanted = params.tab ?? search.tab;
@@ -138,6 +143,9 @@ export function SettingsPage() {
               {tab === "tokens" && <Tokens />}
               {tab === "webhooks" && <Webhooks />}
               {tab === "github" && <GitHub />}
+              {tab === "gitlab" && <GitForge provider="gitlab" />}
+              {tab === "gitea" && <GitForge provider="gitea" />}
+              {tab === "requests" && <Requests />}
               {tab === "fields" && <Fields />}
               {tab === "templates" && <Templates />}
               {tab === "automations" && <Automations />}
@@ -194,7 +202,9 @@ function General() {
             {window.location.host}/{slug}
           </span>
         </div>
-        <p className="muted small">Your role: {workspace.role}</p>
+        <p className="muted small">
+          Your role: {ROLE_INFO[workspace.role].label}. {ROLE_INFO[workspace.role].text}
+        </p>
         {isAdmin && canEdit && (
           <div>
             <button type="submit" className="btn btn-primary" disabled={busy || !name.trim() || name.trim() === workspace.name}>
@@ -208,7 +218,7 @@ function General() {
 }
 
 function Members() {
-  const { slug, me, isAdmin, canEdit } = useWs();
+  const { slug, me, isAdmin, isViewer, canEdit } = useWs();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const members = useMembers(slug);
@@ -262,24 +272,27 @@ function Members() {
                     <select
                       className="select select-sm"
                       value={m.role}
+                      title={ROLE_INFO[m.role].text}
                       onChange={(e) => setRole.mutate({ m, role: e.target.value as Role })}
                     >
-                      {ROLES.map((r) => (
+                      {ROLE_ORDER.map((r) => (
                         <option key={r} value={r}>
-                          {r[0]!.toUpperCase() + r.slice(1)}
+                          {ROLE_INFO[r].label}
                         </option>
                       ))}
                     </select>
                   </label>
                 ) : (
-                  <span className="badge">{m.role}</span>
+                  <span className="badge" title={ROLE_INFO[m.role].text}>
+                    {ROLE_INFO[m.role].label}
+                  </span>
                 )}
                 {isAdmin && canEdit && m.role === "guest" && (
                   <button type="button" className="btn btn-sm" onClick={() => setGuestTeams(m)}>
                     Teams
                   </button>
                 )}
-                {canEdit && (isAdmin || m.userId === me.id) && (
+                {((canEdit && isAdmin) || (m.userId === me.id && (canEdit || isViewer))) && (
                   <button
                     type="button"
                     className="icon-btn"
@@ -294,6 +307,7 @@ function Members() {
           </ul>
         )}
       </Card>
+      <RoleGuide />
       {isAdmin && <PendingInvites />}
       {removing && (
         <ConfirmDialog
@@ -311,6 +325,31 @@ function Members() {
       )}
       {guestTeams && <GuestTeamsDialog member={guestTeams} onClose={() => setGuestTeams(null)} />}
     </>
+  );
+}
+
+/** Display order and one-line descriptions of the workspace roles. */
+export const ROLE_ORDER: Role[] = ["admin", "member", "viewer", "guest"];
+export const ROLE_INFO: Record<Role, { label: string; text: string }> = {
+  admin: { label: "Admin", text: "Can change everything, including members, billing and settings." },
+  member: { label: "Member", text: "Can create and change issues in every team they can see." },
+  viewer: { label: "Viewer", text: "Can see everything members see. Can't change anything. Free." },
+  guest: { label: "Guest", text: "Can work only in the teams they are added to." },
+};
+
+function RoleGuide() {
+  return (
+    <Card title="Roles">
+      <dl className="role-guide">
+        {ROLE_ORDER.map((r) => (
+          <div key={r} className="role-guide-row">
+            <dt className="role-guide-term">{ROLE_INFO[r].label}</dt>
+            <dd className="role-guide-text">{ROLE_INFO[r].text}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="muted small">Private teams are only visible to the people added to them, and to admins.</p>
+    </Card>
   );
 }
 
@@ -332,7 +371,7 @@ function GuestTeamsDialog({ member, onClose }: { member: Member; onClose: () => 
   };
   return (
     <Dialog title={`Teams ${member.name} can see`} onClose={onClose} size="sm">
-      <p className="muted small">Guests only see issues of the teams checked here.</p>
+      <p className="muted small">Guests only see issues of the teams checked here. Adding someone to a private team also lets them see it.</p>
       <ul className="check-list">
         {teams.data?.map((t, i) => (
           <li key={t.id}>
@@ -344,6 +383,7 @@ function GuestTeamsDialog({ member, onClose }: { member: Member; onClose: () => 
                 onChange={(e) => toggle(t, e.target.checked)}
               />
               {t.name} <span className="muted">{t.key}</span>
+              {t.private && <LockIcon label="Private team" />}
             </label>
           </li>
         ))}
@@ -411,10 +451,16 @@ function InviteForm() {
           <label className="field-label" htmlFor="inv-role">
             Role
           </label>
-          <select id="inv-role" className="select" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            {ROLES.map((r) => (
+          <select
+            id="inv-role"
+            className="select"
+            value={role}
+            aria-describedby="inv-role-hint"
+            onChange={(e) => setRole(e.target.value as Role)}
+          >
+            {ROLE_ORDER.map((r) => (
               <option key={r} value={r}>
-                {r[0]!.toUpperCase() + r.slice(1)}
+                {ROLE_INFO[r].label}
               </option>
             ))}
           </select>
@@ -428,10 +474,13 @@ function InviteForm() {
           </button>
         </div>
       </form>
+      <p className="field-hint" id="inv-role-hint" aria-live="polite">
+        {ROLE_INFO[role].label}: {ROLE_INFO[role].text}
+      </p>
       {link && (
         <div className="invite-link">
           <label className="field-label" htmlFor="inv-link">
-            Invite link (anyone with it can join as {role} for 7 days)
+            Invite link (anyone with it can join as {ROLE_INFO[role].label.toLowerCase()} for 7 days)
           </label>
           <div className="row">
             <input id="inv-link" className="input mono" readOnly value={link} onFocus={(e) => e.target.select()} />
@@ -467,7 +516,7 @@ function PendingInvites() {
             <span className="member-info">
               <span className="member-name">{i.email ?? "Invite link"}</span>
               <span className="muted small">
-                {i.role} · expires {new Date(i.expiresAt).toLocaleDateString()}
+                {ROLE_INFO[i.role].label} · expires {new Date(i.expiresAt).toLocaleDateString()}
               </span>
             </span>
             {canEdit && (
@@ -488,16 +537,18 @@ function Teams() {
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
   const [busy, setBusy] = useState(false);
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
-      await api.ws(slug).createTeam(name.trim(), key.trim().toUpperCase());
+      await api.ws(slug).createTeam(name.trim(), key.trim().toUpperCase(), isPrivate);
       await qc.invalidateQueries({ queryKey: keys.teams(slug) });
       await qc.invalidateQueries({ queryKey: keys.states(slug) });
       setName("");
       setKey("");
+      setIsPrivate(false);
       toast("Team created", "success");
     } catch (err) {
       toastError(errorMessage(err));
@@ -511,7 +562,7 @@ function Teams() {
       <WorkspaceLabels />
       {isAdmin && canEdit && (
         <Card title="New team">
-          <form className="invite-form" onSubmit={create}>
+          <form className="invite-form" id="new-team-form" onSubmit={create}>
             <div className="field grow">
               <label className="field-label" htmlFor="team-name">
                 Team name
@@ -539,6 +590,15 @@ function Teams() {
                 onChange={(e) => setKey(e.target.value.toUpperCase())}
                 aria-describedby="team-key-hint"
               />
+            </div>
+            <div className="field form-full">
+              <label className="check-row">
+                <input type="checkbox" checked={isPrivate} aria-describedby="team-private-hint" onChange={(e) => setIsPrivate(e.target.checked)} />
+                Private team
+              </label>
+              <p className="field-hint" id="team-private-hint">
+                Only people added to the team, and admins, can see it and its issues. You are added to it.
+              </p>
             </div>
             <div className="invite-buttons">
               <button type="submit" className="btn btn-primary" disabled={busy || !name.trim() || key.length < 2}>
@@ -594,9 +654,27 @@ function TeamCard({ team }: { team: Team }) {
       toastError(errorMessage(err));
     }
   };
+  const [privacyTarget, setPrivacyTarget] = useState<boolean | null>(null);
+  const setPrivate = async (value: boolean) => {
+    try {
+      await api.ws(slug).updateTeam(team.id, { private: value });
+      await qc.invalidateQueries({ queryKey: keys.teams(slug) });
+      qc.invalidateQueries({ queryKey: keys.issuesAll(slug) });
+      toast(value ? `${team.name} is now private` : `${team.name} is now visible to everyone`, "success");
+    } catch (err) {
+      toastError(errorMessage(err));
+    }
+  };
   const dirty = name.trim() !== team.name || key.trim().toUpperCase() !== team.key;
   return (
-    <Card title={team.name}>
+    <Card
+      title={
+        <span className="team-title">
+          {team.name}
+          {team.private && <LockIcon size={13} label="Private team" />}
+        </span>
+      }
+    >
       <form className="invite-form" onSubmit={save}>
         <div className="field grow">
           <label className="field-label" htmlFor={`tn-${team.id}`}>
@@ -635,8 +713,44 @@ function TeamCard({ team }: { team: Team }) {
           </div>
         )}
       </form>
+      <div className="subsection">
+        <h3 className="subsection-title">Who can see it</h3>
+        {editable ? (
+          <label className="switch">
+            <input
+              type="checkbox"
+              role="switch"
+              aria-checked={Boolean(team.private)}
+              aria-describedby={`tp-${team.id}`}
+              checked={Boolean(team.private)}
+              onChange={(e) => setPrivacyTarget(e.target.checked)}
+            />
+            <span className="switch-track" aria-hidden="true" />
+            <span className="switch-text">Private team</span>
+          </label>
+        ) : null}
+        <p className="muted small" id={`tp-${team.id}`}>
+          {team.private
+            ? "Private: only people in this team, and admins, can see it and its issues."
+            : "Everyone in the workspace except guests can see this team and its issues."}
+        </p>
+      </div>
+      <TeamPeople team={team} />
       <StatusEditor team={team} />
       <LabelEditor teamId={team.id} title="Team labels" />
+      {privacyTarget !== null && (
+        <ConfirmDialog
+          title={privacyTarget ? `Make ${team.name} private?` : `Make ${team.name} visible to everyone?`}
+          message={
+            privacyTarget
+              ? "Only people added to this team, and admins, will see it and its issues. Everyone else loses access right away, including links and notifications about its issues."
+              : "All members and viewers will see this team and its issues. Guests still only see teams they are added to."
+          }
+          confirmLabel={privacyTarget ? "Make private" : "Make visible"}
+          onConfirm={() => setPrivate(privacyTarget)}
+          onClose={() => setPrivacyTarget(null)}
+        />
+      )}
       {archiving && (
         <ConfirmDialog
           title={`Archive ${team.name}?`}
@@ -648,6 +762,96 @@ function TeamCard({ team }: { team: Team }) {
         />
       )}
     </Card>
+  );
+}
+
+/** The team's member list. It decides what guests see, and who sees a private team. */
+function TeamPeople({ team }: { team: Team }) {
+  const { slug, isAdmin, canEdit, me } = useWs();
+  const qc = useQueryClient();
+  const members = useMembers(slug);
+  const list = useQuery({ queryKey: keys.teamMembers(slug, team.id), queryFn: () => api.ws(slug).teamMembers(team.id) });
+  const [adding, setAdding] = useState("");
+  const editable = isAdmin && canEdit;
+  const ids = list.data ?? [];
+  const inTeam = (members.data ?? []).filter((m) => ids.includes(m.userId));
+  const others = (members.data ?? []).filter((m) => !ids.includes(m.userId));
+  const refresh = () => qc.invalidateQueries({ queryKey: keys.teamMembers(slug, team.id) });
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adding) return;
+    try {
+      await api.ws(slug).addTeamMember(team.id, adding);
+      setAdding("");
+      await refresh();
+    } catch (err) {
+      toastError(errorMessage(err));
+    }
+  };
+  const remove = async (m: Member) => {
+    try {
+      await api.ws(slug).removeTeamMember(team.id, m.userId);
+      await refresh();
+      toast(`${m.name} removed from ${team.name}`, "success");
+    } catch (err) {
+      toastError(errorMessage(err));
+    }
+  };
+  return (
+    <div className="subsection">
+      <h3 className="subsection-title">People in this team</h3>
+      <p className="muted small">
+        Guests only see teams they are in.{" "}
+        {team.private
+          ? "This team is private, so only these people and admins can see it."
+          : "If the team is made private, only these people and admins can see it."}
+      </p>
+      {list.isPending ? (
+        <Skeleton rows={1} />
+      ) : inTeam.length === 0 ? (
+        <p className="muted small">No one is added yet.</p>
+      ) : (
+        <ul className="member-list compact">
+          {inTeam.map((m) => (
+            <li key={m.userId} className="member-row">
+              <Avatar member={m} size={22} />
+              <span className="member-info">
+                <span className="member-name">
+                  {m.name}
+                  {m.userId === me.id && <span className="muted"> (you)</span>}
+                </span>
+              </span>
+              <span className="badge">{ROLE_INFO[m.role].label}</span>
+              {editable && (
+                <button type="button" className="icon-btn small" aria-label={`Remove ${m.name} from ${team.name}`} onClick={() => remove(m)}>
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {editable && others.length > 0 && (
+        <form className="add-row" onSubmit={add}>
+          <select
+            className="select select-sm"
+            aria-label={`Add someone to ${team.name}`}
+            value={adding}
+            onChange={(e) => setAdding(e.target.value)}
+          >
+            <option value="">Pick a person</option>
+            {others.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.name} ({ROLE_INFO[m.role].label})
+              </option>
+            ))}
+          </select>
+          <button type="submit" className="btn btn-sm" disabled={!adding}>
+            Add to team
+          </button>
+        </form>
+      )}
+    </div>
   );
 }
 

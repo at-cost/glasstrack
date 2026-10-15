@@ -28,7 +28,7 @@ export function Tokens() {
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<{ name: string; token: string } | null>(null);
   const [revoking, setRevoking] = useState<ApiToken | null>(null);
-  const canCreate = workspace.role !== "guest";
+  const canCreate = workspace.role !== "guest" && workspace.role !== "viewer";
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();

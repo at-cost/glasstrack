@@ -97,17 +97,23 @@ function ParentPicker({ issue, disabled }: { issue: IssueDetail; disabled: boole
           {parent.identifier}
         </Link>
       ) : null}
-      <button
-        ref={setAnchor}
-        type="button"
-        className="prop-btn"
-        disabled={disabled}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => setOpen(true)}
-      >
-        {issue.parentId ? "Change" : "Set parent"}
-      </button>
+      {disabled ? (
+        issue.parentId ? null : (
+          <span className="muted">None</span>
+        )
+      ) : (
+        <button
+          ref={setAnchor}
+          type="button"
+          className="prop-btn"
+          disabled={disabled}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={() => setOpen(true)}
+        >
+          {issue.parentId ? "Change" : "Set parent"}
+        </button>
+      )}
       {issue.parentId && !disabled && (
         <button
           type="button"
@@ -133,6 +139,33 @@ function ParentPicker({ issue, disabled }: { issue: IssueDetail; disabled: boole
           }}
         />
       )}
+    </div>
+  );
+}
+
+type RequesterInfo = NonNullable<IssueDetail["requester"]>;
+
+/** Who sent this issue in through a request form or email inbox. */
+function Requester({ requester: r }: { requester: RequesterInfo }) {
+  const via =
+    r.via === "email"
+      ? `${r.channelName ? `the ${r.channelName} ` : "an "}email inbox`
+      : `${r.channelName ? `the ${r.channelName} ` : "a "}form`;
+  const mail = r.email ? <a href={`mailto:${r.email}`}>{r.email}</a> : null;
+  return (
+    <div className="requester" data-testid="requester">
+      <span className="prop-label">Requested by</span>
+      <p className="requester-text">
+        {r.name ? (
+          <>
+            <strong>{r.name}</strong>
+            {mail && <> ({mail})</>}
+          </>
+        ) : (
+          (mail ?? <strong>Someone who left no email</strong>)
+        )}{" "}
+        via {via}
+      </p>
     </div>
   );
 }
@@ -169,6 +202,7 @@ export function Properties({ issue }: { issue: IssueDetail }) {
 
   return (
     <aside className="props" aria-label="Properties">
+      {issue.requester && <Requester requester={issue.requester} />}
       <Row label="Status">
         <PickerButton
           label="Status"
@@ -224,7 +258,7 @@ export function Properties({ issue }: { issue: IssueDetail }) {
           disabled={disabled}
         >
           {issueLabels.length === 0 ? (
-            <span className="muted">Add labels</span>
+            <span className="muted">{disabled ? "None" : "Add labels"}</span>
           ) : (
             <span className="label-list">
               {issueLabels.map((l) => (
@@ -249,51 +283,67 @@ export function Properties({ issue }: { issue: IssueDetail }) {
         </PickerButton>
       </Row>
       <Row label="Start date">
-        <label className="prop-btn date-prop">
-          <Calendar size={14} aria-hidden="true" />
-          <input
-            type="date"
-            className="date-input"
-            aria-label="Start date"
-            value={issue.startDate ?? ""}
-            max={issue.dueDate ?? undefined}
-            disabled={disabled}
-            onChange={(e) => update.mutate({ issue, patch: { startDate: e.target.value || null } })}
-          />
-        </label>
+        {disabled ? (
+          <span className={issue.startDate ? undefined : "muted"}>
+            {issue.startDate ? new Date(`${issue.startDate}T00:00:00`).toLocaleDateString() : "None"}
+          </span>
+        ) : (
+          <label className="prop-btn date-prop">
+            <Calendar size={14} aria-hidden="true" />
+            <input
+              type="date"
+              className="date-input"
+              aria-label="Start date"
+              value={issue.startDate ?? ""}
+              max={issue.dueDate ?? undefined}
+              disabled={disabled}
+              onChange={(e) => update.mutate({ issue, patch: { startDate: e.target.value || null } })}
+            />
+          </label>
+        )}
       </Row>
       <Row label="Due date">
-        <label className="prop-btn date-prop">
-          <Calendar size={14} aria-hidden="true" />
-          <input
-            type="date"
-            className="date-input"
-            aria-label="Due date"
-            value={issue.dueDate ?? ""}
-            min={issue.startDate ?? undefined}
-            disabled={disabled}
-            onChange={(e) => update.mutate({ issue, patch: { dueDate: e.target.value || null } })}
-          />
-        </label>
+        {disabled ? (
+          <span className={issue.dueDate ? undefined : "muted"}>
+            {issue.dueDate ? new Date(`${issue.dueDate}T00:00:00`).toLocaleDateString() : "None"}
+          </span>
+        ) : (
+          <label className="prop-btn date-prop">
+            <Calendar size={14} aria-hidden="true" />
+            <input
+              type="date"
+              className="date-input"
+              aria-label="Due date"
+              value={issue.dueDate ?? ""}
+              min={issue.startDate ?? undefined}
+              disabled={disabled}
+              onChange={(e) => update.mutate({ issue, patch: { dueDate: e.target.value || null } })}
+            />
+          </label>
+        )}
       </Row>
       <Row label="Estimate">
-        <input
-          className="input input-sm"
-          type="number"
-          min={0}
-          max={1000}
-          step="0.5"
-          inputMode="decimal"
-          aria-label="Estimate"
-          placeholder="None"
-          value={estimate}
-          disabled={disabled}
-          onChange={(e) => setEstimate(e.target.value)}
-          onBlur={saveEstimate}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          }}
-        />
+        {disabled ? (
+          <span className={issue.estimate == null ? "muted" : undefined}>{issue.estimate ?? "None"}</span>
+        ) : (
+          <input
+            className="input input-sm"
+            type="number"
+            min={0}
+            max={1000}
+            step="0.5"
+            inputMode="decimal"
+            aria-label="Estimate"
+            placeholder="None"
+            value={estimate}
+            disabled={disabled}
+            onChange={(e) => setEstimate(e.target.value)}
+            onBlur={saveEstimate}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            }}
+          />
+        )}
       </Row>
       <Row label="Parent">
         <ParentPicker issue={issue} disabled={disabled} />

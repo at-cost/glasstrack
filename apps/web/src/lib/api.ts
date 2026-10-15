@@ -10,12 +10,16 @@ import type {
   Issue,
   IssueDetail,
   IssueFilter,
+  GitIntegration,
+  GitProvider,
+  IntakeChannel,
   IssueTemplate,
   Label,
   Me,
   Member,
   Notification,
   NotificationSettings,
+  PublicForm,
   RecurringIssue,
   Role,
   SavedView,
@@ -28,6 +32,7 @@ import type {
   WorkflowState,
 } from "@glasstrack/shared";
 import { setReadOnly, ssoRequiredStore } from "./store";
+import { toastError } from "./toast";
 
 export class ApiError extends Error {
   constructor(
@@ -64,6 +69,8 @@ export async function request<T>(method: string, path: string, body?: unknown): 
       // not JSON
     }
     if (res.status === 402 && code === "read_only") setReadOnly(true);
+    // Viewers are read-only; a write that slips past the hidden controls gets the server's own words.
+    if (res.status === 403 && code === "read_only_viewer") toastError(message);
     if (res.status === 403 && code === "sso_required") {
       const m = /^\/w\/([^/?]+)/.exec(path);
       if (m) ssoRequiredStore.set(decodeURIComponent(m[1]!));
@@ -231,6 +238,21 @@ export interface GithubIntegration {
   moveOnMerge?: boolean;
 }
 
+export type IntakeInput = {
+  teamId: string;
+  kind: IntakeChannel["kind"];
+  name: string;
+  intro?: string;
+  enabled?: boolean;
+  statusId?: string | null;
+  labelIds?: string[];
+  requireEmail?: boolean;
+  membersOnly?: boolean;
+  notifySubmitter?: boolean;
+};
+export type IntakePatch = Partial<Omit<IntakeInput, "kind">> & { rotateToken?: boolean };
+export type FormSubmission = { title: string; description: string; email?: string; name?: string; website: string };
+
 export interface RelationLink {
   id: string;
   /** The blocker. */
@@ -328,6 +350,8 @@ export interface AdminOverview {
 
 export const api = {
   publicFinances: (days = 365) => get<PublicFinances>(`/public/finances?days=${days}`),
+  publicForm: (token: string) => get<PublicForm>(`/forms/${enc(token)}`),
+  submitForm: (token: string, b: FormSubmission) => post<{ ok: true }>(`/forms/${enc(token)}`, b),
   admin: {
     me: () => get<{ operator: boolean }>("/admin/me"),
     overview: () => get<AdminOverview>("/admin/overview"),
@@ -366,8 +390,8 @@ export const api = {
       revokeInvite: (id: string) => del<{ ok: true }>(`${w}/invites/${id}`),
 
       teams: () => get<Team[]>(`${w}/teams`),
-      createTeam: (name: string, key: string) => post<Team>(`${w}/teams`, { name, key }),
-      updateTeam: (id: string, b: { name?: string; key?: string }) => patch<Team>(`${w}/teams/${id}`, b),
+      createTeam: (name: string, key: string, isPrivate = false) => post<Team>(`${w}/teams`, { name, key, private: isPrivate }),
+      updateTeam: (id: string, b: { name?: string; key?: string; private?: boolean }) => patch<Team>(`${w}/teams/${id}`, b),
       archiveTeam: (id: string) => del<{ ok: true }>(`${w}/teams/${id}`),
       teamMembers: (teamId: string) => get<string[]>(`${w}/teams/${teamId}/members`),
       addTeamMember: (teamId: string, userId: string) => put<{ ok: true }>(`${w}/teams/${teamId}/members/${userId}`, {}),
@@ -473,6 +497,14 @@ export const api = {
       github: () => get<GithubIntegration>(`${w}/integrations/github`),
       saveGithub: (b: { moveOnMerge: boolean; rotateSecret?: boolean }) => put<GithubIntegration>(`${w}/integrations/github`, b),
       disableGithub: () => del<{ ok: true }>(`${w}/integrations/github`),
+      gitForge: (p: GitProvider) => get<GitIntegration>(`${w}/integrations/${p}`),
+      saveGitForge: (p: GitProvider, b: { moveOnMerge: boolean; rotateSecret?: boolean }) => put<GitIntegration>(`${w}/integrations/${p}`, b),
+      disableGitForge: (p: GitProvider) => del<{ ok: true }>(`${w}/integrations/${p}`),
+
+      intake: () => get<IntakeChannel[]>(`${w}/intake`),
+      createIntake: (b: IntakeInput) => post<IntakeChannel>(`${w}/intake`, b),
+      updateIntake: (id: string, b: IntakePatch) => patch<IntakeChannel>(`${w}/intake/${id}`, b),
+      deleteIntake: (id: string) => del<{ ok: true }>(`${w}/intake/${id}`),
 
       fields: () => get<CustomField[]>(`${w}/fields`),
       createField: (b: CustomFieldInput) => post<CustomField>(`${w}/fields`, b),

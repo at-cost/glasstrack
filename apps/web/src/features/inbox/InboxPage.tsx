@@ -80,15 +80,20 @@ export function InboxPage() {
           <ul className="inbox-list">
             {list.data.map((n) => {
               const actor = members.data?.find((m) => m.userId === n.actorId);
-              const excerpt = typeof n.data.excerpt === "string" ? n.data.excerpt : null;
+              const rawExcerpt = typeof n.data.excerpt === "string" ? n.data.excerpt : null;
+              // Email replies have no member behind them; the sender's address stands in.
+              const sender = n.data?.via === "email" && typeof n.data.from === "string" ? n.data.from : null;
+              const excerpt = sender && rawExcerpt ? rawExcerpt.replace(/\s*_Email from \S+?_\s*$/, "") : rawExcerpt;
+              const actorLabel =
+                actor?.name ?? sender ?? (n.data?.via === "automation" ? `Automation "${String(n.data.rule ?? "")}"` : "Someone");
               return (
                 <li key={n.id}>
                   <button type="button" className={`inbox-row${n.readAt ? "" : " unread"}`} onClick={() => open(n)} data-issue-row>
                     <span className="unread-dot" aria-hidden="true" />
-                    <Avatar member={actor ?? { name: n.data?.via === "automation" ? "Automation" : "?", avatarUrl: null }} size={24} />
+                    <Avatar member={actor ?? { name: sender ?? (n.data?.via === "automation" ? "Automation" : "?"), avatarUrl: null }} size={24} />
                     <span className="inbox-text">
                       <span className="inbox-line">
-                        <strong>{actor?.name ?? (n.data?.via === "automation" ? `Automation "${String(n.data.rule ?? "")}"` : "Someone")}</strong> {VERB[n.kind]} <span className="issue-id">{n.issueIdentifier}</span>{" "}
+                        <strong>{actorLabel}</strong> {VERB[n.kind]} <span className="issue-id">{n.issueIdentifier}</span>{" "}
                         <span className="inbox-title">{n.issueTitle}</span>
                       </span>
                       {excerpt && <span className="inbox-excerpt">{excerpt}</span>}

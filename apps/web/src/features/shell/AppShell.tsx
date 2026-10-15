@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FullPageLoading } from "../../components/Feedback";
+import { LockIcon } from "../../components/icons";
 import { Popover } from "../../components/Picker";
 import { ApiError, api, errorMessage } from "../../lib/api";
 import { lastWorkspace, paths, rememberWorkspace } from "../../lib/paths";
@@ -68,7 +69,17 @@ export function WorkspaceLayout() {
   useRealtime(slug, Boolean(ws.data));
 
   const ctx = useMemo<WsContext | null>(
-    () => (me.data && ws.data ? { slug, workspace: ws.data, me: me.data, isAdmin: ws.data.role === "admin", canEdit: !readOnly } : null),
+    () =>
+      me.data && ws.data
+        ? {
+            slug,
+            workspace: ws.data,
+            me: me.data,
+            isAdmin: ws.data.role === "admin",
+            isViewer: ws.data.role === "viewer",
+            canEdit: !readOnly && ws.data.role !== "viewer",
+          }
+        : null,
     [me.data, ws.data, slug, readOnly],
   );
 
@@ -162,6 +173,7 @@ function Shell() {
           </button>
         </div>
         {readOnly && <ReadOnlyBanner />}
+        {!readOnly && <ViewerBanner />}
         <main id="main" className="main" tabIndex={-1}>
           <Outlet />
         </main>
@@ -189,6 +201,39 @@ function ReadOnlyBanner() {
         ) : (
           " An admin can add credit to turn editing back on."
         ))}
+    </div>
+  );
+}
+
+const VIEWER_NOTE = "You can view this workspace. Ask an admin to make you a member to make changes.";
+const viewerBannerKey = (slug: string) => `glasstrack-viewer-banner-${slug}`;
+
+/** Shown to viewers once per browser session; the sidebar keeps a quiet reminder. */
+function ViewerBanner() {
+  const { slug, isViewer } = useWs();
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return sessionStorage.getItem(viewerBannerKey(slug)) === "1";
+    } catch {
+      return false;
+    }
+  });
+  if (!isViewer || hidden) return null;
+  const dismiss = () => {
+    setHidden(true);
+    try {
+      sessionStorage.setItem(viewerBannerKey(slug), "1");
+    } catch {
+      // storage blocked
+    }
+  };
+  return (
+    <div className="banner subtle banner-row" role="status" data-testid="viewer-banner">
+      <Eye size={14} aria-hidden="true" />
+      <span>{VIEWER_NOTE}</span>
+      <button type="button" className="icon-btn small" aria-label="Dismiss" onClick={dismiss}>
+        <X size={14} />
+      </button>
     </div>
   );
 }
@@ -229,6 +274,7 @@ function NavLink({
 
 function Sidebar() {
   const { slug, me } = useWsSafe();
+  const { isViewer } = useWs();
   const readOnly = useReadOnly();
   const teams = useTeams(slug);
   const views = useViews(slug);
@@ -247,16 +293,23 @@ function Sidebar() {
         </button>
       </div>
       <div className="sidebar-actions">
-        <button
-          type="button"
-          className="btn btn-primary new-issue"
-          data-testid="new-issue-button"
-          disabled={readOnly}
-          onClick={() => ui.openCreate()}
-        >
-          <Plus size={15} aria-hidden="true" />
-          New issue
-        </button>
+        {isViewer ? (
+          <p className="viewer-note" data-testid="viewer-note">
+            <Eye size={14} aria-hidden="true" />
+            <span>{VIEWER_NOTE}</span>
+          </p>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-primary new-issue"
+            data-testid="new-issue-button"
+            disabled={readOnly}
+            onClick={() => ui.openCreate()}
+          >
+            <Plus size={15} aria-hidden="true" />
+            New issue
+          </button>
+        )}
         <button
           type="button"
           className="icon-btn bordered"
@@ -291,6 +344,12 @@ function Sidebar() {
                   {isCollapsed ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
                   <span className="team-key">{t.key}</span>
                   <span className="nav-text">{t.name}</span>
+                  {t.private && (
+                    <span className="nav-lock" title="Private team">
+                      <LockIcon />
+                      <span className="sr-only">(private)</span>
+                    </span>
+                  )}
                 </button>
                 {!isCollapsed && (
                   <div className="nav-team-links">

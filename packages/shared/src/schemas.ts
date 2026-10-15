@@ -9,7 +9,7 @@ export const emailSchema = z.email().max(254).transform((e) => e.trim().toLowerC
 
 /** Top-level app and server paths a workspace URL must not shadow. */
 export const RESERVED_SLUGS = new Set([
-  "admin", "api", "assets", "auth", "finances", "health", "invite", "login", "logout", "new", "ready", "settings",
+  "admin", "api", "assets", "auth", "finances", "forms", "health", "invite", "login", "logout", "new", "ready", "settings",
   "signup", "static", "docs", "pricing", "about", "status", "help", "support", "www", "app", "glasstrack",
 ]);
 

@@ -2,7 +2,7 @@ import { PRIORITY_LABELS, type Priority } from "@glasstrack/shared";
 import { Calendar, ChevronDown, ChevronRight, FileText, Tag } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Dialog } from "../../components/Dialog";
-import { AvatarStack, LabelDot, PriorityIcon, StatusIcon } from "../../components/icons";
+import { AvatarStack, LabelDot, PriorityIcon, StatusIcon, teamOptionLabel } from "../../components/icons";
 import { MarkdownEditor } from "../../components/MarkdownEditor";
 import { PickerButton } from "../../components/Picker";
 import { useCreateIssue } from "../../lib/mutations";
@@ -213,7 +213,7 @@ export function CreateIssueDialog({ defaults, onClose }: { defaults: CreateDefau
             >
               {teams.data?.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.key} {t.name}
+                  {teamOptionLabel(t, t.key)}
                 </option>
               ))}
             </select>

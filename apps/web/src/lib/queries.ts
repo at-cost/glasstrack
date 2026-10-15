@@ -30,6 +30,8 @@ export const keys = {
   webhooks: (slug: string) => ["webhooks", slug] as const,
   deliveries: (slug: string, id: string) => ["deliveries", slug, id] as const,
   github: (slug: string) => ["github", slug] as const,
+  gitForge: (slug: string, provider: string) => ["git-forge", slug, provider] as const,
+  intake: (slug: string) => ["intake", slug] as const,
   fields: (slug: string) => ["fields", slug] as const,
   templates: (slug: string) => ["templates", slug] as const,
   recurring: (slug: string) => ["recurring", slug] as const,
@@ -45,6 +47,7 @@ export const keys = {
   operator: ["operator"] as const,
   adminOverview: ["admin-overview"] as const,
   publicFinances: ["public-finances"] as const,
+  publicForm: (token: string) => ["public-form", token] as const,
 };
 
 export const meQuery = queryOptions({ queryKey: keys.me, queryFn: api.me, staleTime: 60_000, retry: false });

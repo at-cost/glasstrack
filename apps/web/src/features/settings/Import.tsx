@@ -10,6 +10,7 @@ import { paths } from "../../lib/paths";
 import { keys, useTeams } from "../../lib/queries";
 import { toastError } from "../../lib/toast";
 import { useWs } from "../shell/context";
+import { teamOptionLabel } from "../../components/icons";
 
 const SOURCES: { id: ImportSource; label: string; accept: string; where: string }[] = [
   { id: "linear", label: "Linear (CSV)", accept: ".csv,text/csv", where: "In Linear: Settings, Import/export, Export CSV." },
@@ -128,7 +129,7 @@ export function Import() {
           >
             {teams.data?.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.name} ({t.key})
+                {teamOptionLabel(t)} ({t.key})
               </option>
             ))}
           </select>

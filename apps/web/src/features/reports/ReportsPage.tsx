@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { BarChart } from "../../components/BarChart";
 import { Empty, Skeleton } from "../../components/Feedback";
-import { Avatar, LabelDot } from "../../components/icons";
+import { Avatar, LabelDot, teamOptionLabel } from "../../components/icons";
 import { LineChart, shortDate } from "../../components/LineChart";
 import { api, errorMessage } from "../../lib/api";
 import { addDays, toISODate, todayISO } from "../../lib/format";
@@ -139,7 +139,7 @@ export function ReportsPage() {
               <option value="">All teams</option>
               {teams.data?.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name}
+                  {teamOptionLabel(t)}
                 </option>
               ))}
             </select>

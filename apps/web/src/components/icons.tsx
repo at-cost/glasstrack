@@ -170,3 +170,28 @@ export function AvatarStack({
     </span>
   );
 }
+
+/** Small padlock for private teams. Pass `label` when it is the only sign the team is private. */
+export function LockIcon({ size = 12, label }: { size?: number; label?: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 12 12"
+      className="lock-icon"
+      role={label ? "img" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+    >
+      {label && <title>{label}</title>}
+      <path d="M3.6 5.2V3.8a2.4 2.4 0 0 1 4.8 0v1.4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      <rect x="2.2" y="5.1" width="7.6" height="5.6" rx="1.4" fill="currentColor" />
+      <circle cx="6" cy="7.7" r="0.85" fill="var(--surface)" />
+    </svg>
+  );
+}
+
+/** Team name for native selects, which can't show icons. */
+export function teamOptionLabel(t: { name: string; private?: boolean }, key?: string): string {
+  return `${key ? `${key} ` : ""}${t.name}${t.private ? " (private)" : ""}`;
+}

@@ -149,12 +149,15 @@ export const teamRoutes = new Hono<AppEnv>()
     await trx.insertInto("teamMembers")
       .values({ workspaceId: c.get("ws").id, teamId: c.req.param("teamId"), userId: c.req.param("userId") })
       .onConflict((oc) => oc.columns(["teamId", "userId"]).doNothing()).execute();
+    // Private teams and guest access change with membership, so clients refetch teams.
+    await changed(trx, c.get("ws").id, "team", c.req.param("teamId"));
     return c.json({ ok: true });
   })
   .delete("/teams/:teamId/members/:userId", async (c) => {
     requireRole(c, "admin");
     await c.get("trx").deleteFrom("teamMembers").where("teamId", "=", c.req.param("teamId"))
       .where("userId", "=", c.req.param("userId")).execute();
+    await changed(c.get("trx"), c.get("ws").id, "team", c.req.param("teamId"));
     return c.json({ ok: true });
   })
 
@@ -211,7 +214,10 @@ export const teamRoutes = new Hono<AppEnv>()
 
   // Labels
   .get("/labels", async (c) => {
-    const rows = await c.get("trx").selectFrom("labels").select(["id", "teamId", "name", "color"]).orderBy("name").execute();
+    const visible = await visibleTeamIds(c);
+    const rows = await c.get("trx").selectFrom("labels").select(["id", "teamId", "name", "color"])
+      .$if(visible !== null, (q) => q.where((eb) => eb.or([eb("teamId", "is", null), eb("teamId", "in", visible?.length ? visible : ["00000000-0000-0000-0000-000000000000"])])))
+      .orderBy("name").execute();
     return c.json(rows satisfies Label[]);
   })
   .post("/labels", async (c) => {

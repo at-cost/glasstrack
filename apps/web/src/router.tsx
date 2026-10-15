@@ -4,6 +4,7 @@ import { IndexPage, InvitePage, LoginPage, NewWorkspacePage, VerifyPage } from "
 import { AdminPage } from "./features/admin/AdminPage";
 import { CyclesPage } from "./features/cycles/CyclesPage";
 import { FinancesPage } from "./features/finances/FinancesPage";
+import { PublicFormPage } from "./features/forms/PublicFormPage";
 import { InboxPage } from "./features/inbox/InboxPage";
 import { IssueDetailPage } from "./features/issue/IssueDetail";
 import { MyIssuesPage, TeamBacklogPage, TeamBoardPage, TeamIssuesPage, ViewPage } from "./features/issues/pages";
@@ -43,6 +44,8 @@ const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: "/login"
 const verifyRoute = createRoute({ getParentRoute: () => rootRoute, path: "/auth/verify", component: VerifyPage });
 const inviteRoute = createRoute({ getParentRoute: () => rootRoute, path: "/invite/$token", component: InvitePage });
 const financesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/finances", component: FinancesPage });
+// Public request forms: no sign-in and no app shell.
+const formRoute = createRoute({ getParentRoute: () => rootRoute, path: "/forms/$token", component: PublicFormPage });
 const adminRoute = createRoute({ getParentRoute: () => rootRoute, path: "/admin", component: AdminPage });
 const newWsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/new", component: NewWorkspacePage });
 
@@ -56,6 +59,7 @@ const routeTree = rootRoute.addChildren([
   inviteRoute,
   newWsRoute,
   financesRoute,
+  formRoute,
   adminRoute,
   wsRoute.addChildren([
     child("/", WorkspaceIndex),

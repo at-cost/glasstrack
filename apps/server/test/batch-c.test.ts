@@ -35,6 +35,8 @@ describe("private teams", () => {
   it("hides a private team and its issues from non-members, including links and notifications", async () => {
     const { c, team, ben, vic } = await setup();
     const secret = await c.ok("POST", "/api/v1/w/acme/teams", { name: "Security", key: "SEC", private: true });
+    await c.ok("POST", "/api/v1/w/acme/labels", { name: "pentest", color: "#aa0000", teamId: secret.id });
+    expect((await ben.c.ok("GET", "/api/v1/w/acme/labels")).map((l: { name: string }) => l.name)).not.toContain("pentest");
     expect(secret.private).toBe(true);
     const hidden = await c.ok("POST", "/api/v1/w/acme/issues", { teamId: secret.id, title: "Rotate keys", description: "@ben please look" });
     const open = await c.ok("POST", "/api/v1/w/acme/issues", { teamId: team.id, title: "Public work" });

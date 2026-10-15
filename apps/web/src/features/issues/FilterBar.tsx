@@ -299,7 +299,7 @@ export function FilterBar({
       )}
       <span className="filter-spacer" />
       {extra}
-      {canSave && workspace.status !== "read_only" && (
+      {canSave && workspace.status !== "read_only" && workspace.role !== "viewer" && (
         <button type="button" className="btn btn-sm" onClick={() => setSaving(true)}>
           <Save size={13} aria-hidden="true" />
           Save view

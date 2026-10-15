@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type Activity, type Comment, type IssueDetail, type Member, PRIORITY_LABELS, type Priority } from "@glasstrack/shared";
-import { Bot, Pencil, Trash2 } from "lucide-react";
+import { Bot, Mail, Pencil, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ConfirmDialog } from "../../components/Dialog";
 import { Avatar } from "../../components/icons";
@@ -16,20 +16,51 @@ import { cycleLabel } from "./options";
 
 const SOURCE_NAME: Record<string, string> = { linear: "Linear", jira: "Jira", trello: "Trello" };
 
+type Provider = "github" | "gitlab" | "gitea";
+const PROVIDER_NAME: Record<Provider, string> = { github: "GitHub", gitlab: "GitLab", gitea: "Gitea" };
+
+/** Which git host a pull/merge request URL belongs to: the issue's own links first, then the URL shape. */
+function providerOf(d: Record<string, unknown>, links: IssueDetail["links"]): Provider {
+  if (d.provider === "gitlab" || d.provider === "gitea" || d.provider === "github") return d.provider;
+  if (d.via === "gitlab" || d.via === "gitea") return d.via;
+  const url = typeof d.url === "string" ? d.url : "";
+  const link = links?.find((l) => l.url === url);
+  if (link) return link.provider;
+  if (url.includes("/-/merge_requests/")) return "gitlab";
+  if (/\/pulls\/\d+/.test(url)) return "gitea";
+  return "github";
+}
+
+/** Activity written by a request form or email inbox rather than a person. */
+const fromRequest = (a: Activity) => {
+  const d = a.data as Record<string, unknown>;
+  return a.actorId === null && ((a.kind === "created" && (d.via === "form" || d.via === "email")) || a.kind === "email_reply");
+};
+
 /** Who did it. Automated entries have no actor. */
-function actorName(a: Activity, name: string | undefined): string {
+function actorName(a: Activity, name: string | undefined, links: IssueDetail["links"]): string {
   if (a.actorId === null) {
     const d = a.data as Record<string, unknown>;
     if (d.via === "automation" || a.kind === "automation_comment") return d.rule ? `Automation "${String(d.rule)}"` : "Automation";
-    if (a.kind === "pr_linked" || a.kind === "pr_merged" || d.via === "github") return "GitHub";
+    if (a.kind === "pr_linked" || a.kind === "pr_merged" || d.via === "github" || d.via === "gitlab" || d.via === "gitea") {
+      return PROVIDER_NAME[providerOf(d, links)];
+    }
     return "Glasstrack";
   }
   return name ?? "A former member";
 }
 
+/** Replies by email are stored as comments without an author, ending with "_Email from x_". */
+const EMAIL_TRAILER = /\s*_Email from (\S+?)_\s*$/;
+export function emailAuthor(c: Pick<Comment, "authorId" | "body">): { from: string; body: string } | null {
+  if (c.authorId) return null;
+  const m = EMAIL_TRAILER.exec(c.body);
+  return m ? { from: m[1]!, body: c.body.slice(0, m.index) } : null;
+}
+
 type Item = { kind: "comment"; at: string; c: Comment } | { kind: "activity"; at: string; a: Activity };
 
-function useDescribe() {
+function useDescribe(links: IssueDetail["links"]) {
   const { slug } = useWs();
   const states = useStates(slug);
   const members = useMembers(slug);
@@ -45,9 +76,10 @@ function useDescribe() {
     const c = cycles.data?.find((x) => x.id === id);
     return c ? cycleLabel(c) : "a removed cycle";
   };
+  const changeName = (d: Record<string, unknown>) => (providerOf(d, links) === "gitlab" ? "merge request" : "pull request");
   const prLink = (d: Record<string, unknown>) => {
-    const url = typeof d.url === "string" && /^https:\/\//.test(d.url) ? d.url : null;
-    const title = String(d.title ?? "a pull request");
+    const url = typeof d.url === "string" && /^https?:\/\//.test(d.url) ? d.url : null;
+    const title = String(d.title ?? `a ${changeName(d)}`);
     return url ? (
       <a href={url} target="_blank" rel="noreferrer">
         {title}
@@ -62,17 +94,30 @@ function useDescribe() {
       case "imported":
         return `imported this from ${SOURCE_NAME[String(d.source)] ?? "another tracker"}${d.externalId ? ` (${String(d.externalId)})` : ""}`;
       case "pr_linked":
-        return <>linked pull request {prLink(d)}</>;
+        return (
+          <>
+            linked {changeName(d)} {prLink(d)}
+          </>
+        );
       case "pr_merged":
-        return <>merged pull request {prLink(d)}</>;
+        return (
+          <>
+            merged {changeName(d)} {prLink(d)}
+          </>
+        );
+      case "email_reply":
+        return `Email reply from ${String(d.from ?? "the requester")}`;
       case "created":
+        if (d.via === "form") return `Created from ${d.channel ? `the ${String(d.channel)} form` : "a request form"}`;
+        if (d.via === "email") return `Created from an email${d.from ? ` from ${String(d.from)}` : ""}`;
         return d.recurringId ? "created this from a recurring template" : d.templateId ? "created the issue from a template" : "created the issue";
       case "title":
         return `renamed it to "${String(d.to ?? "")}"`;
       case "description":
         return "updated the description";
       case "status":
-        if (d.via === "github") return `moved this to ${stateName(d.to)} after a pull request was merged`;
+        if (d.via === "github" || d.via === "gitea") return `moved this to ${stateName(d.to)} after a pull request was merged`;
+        if (d.via === "gitlab") return `moved this to ${stateName(d.to)} after a merge request was merged`;
         return `changed status from ${stateName(d.from)} to ${stateName(d.to)}`;
       case "priority":
         return `set priority to ${PRIORITY_LABELS[(Number(d.to) || 0) as Priority]}`;
@@ -134,11 +179,11 @@ function useDescribe() {
 }
 
 export function Timeline({ issue }: { issue: IssueDetail }) {
-  const { slug } = useWs();
+  const { slug, isViewer } = useWs();
   const comments = useComments(slug, issue.id);
   const activity = useActivity(slug, issue.id);
   const members = useMembers(slug);
-  const describe = useDescribe();
+  const describe = useDescribe(issue.links);
   const items: Item[] = [
     ...(comments.data ?? []).map((c): Item => ({ kind: "comment", at: c.createdAt, c })),
     ...(activity.data ?? []).map((a): Item => ({ kind: "activity", at: a.createdAt, a })),
@@ -154,9 +199,13 @@ export function Timeline({ issue }: { issue: IssueDetail }) {
           it.kind === "activity" ? (
             <li key={`a${it.a.id}`} className="tl-activity">
               <span className="tl-dot" aria-hidden="true" />
-              <span>
-                <strong>{actorName(it.a, member(it.a.actorId)?.name)}</strong> {describe(it.a)}
-              </span>
+              {fromRequest(it.a) ? (
+                <span>{describe(it.a)}</span>
+              ) : (
+                <span>
+                  <strong>{actorName(it.a, member(it.a.actorId)?.name, issue.links)}</strong> {describe(it.a)}
+                </span>
+              )}
               <time dateTime={it.a.createdAt} title={fullTime(it.a.createdAt)} className="tl-time">
                 {relativeTime(it.a.createdAt)}
               </time>
@@ -168,7 +217,11 @@ export function Timeline({ issue }: { issue: IssueDetail }) {
           ),
         )}
       </ol>
-      <CommentBox issueId={issue.id} members={members.data} />
+      {isViewer ? (
+        <p className="muted small">Viewers can read comments but not write them.</p>
+      ) : (
+        <CommentBox issueId={issue.id} members={members.data} />
+      )}
     </section>
   );
 }
@@ -211,7 +264,8 @@ function CommentItem({ comment, issueId, author, members }: { comment: Comment; 
     onSettled: () => qc.invalidateQueries({ queryKey: key }),
   });
   const automated = !comment.authorId;
-  const authorName = automated ? "Automation" : (author?.name ?? "Former member");
+  const email = emailAuthor(comment);
+  const authorName = email ? email.from : automated ? "Automation" : (author?.name ?? "Former member");
   const mine = !automated && comment.authorId === me.id;
   const pending = comment.id.startsWith("temp-");
   const save = () => {
@@ -224,10 +278,14 @@ function CommentItem({ comment, issueId, author, members }: { comment: Comment; 
     <article
       className={`comment${pending ? " pending" : ""}`}
       data-testid="comment"
-      aria-label={`Comment by ${automated ? "Automation" : (author?.name ?? "a former member")}`}
+      aria-label={`Comment by ${email ? email.from : automated ? "Automation" : (author?.name ?? "a former member")}`}
     >
       <header className="comment-head">
-        {automated ? (
+        {email ? (
+          <span className="avatar automation-avatar" style={{ width: 22, height: 22 }} aria-hidden="true">
+            <Mail size={13} />
+          </span>
+        ) : automated ? (
           <span className="avatar automation-avatar" style={{ width: 22, height: 22 }} aria-hidden="true">
             <Bot size={14} />
           </span>
@@ -283,7 +341,7 @@ function CommentItem({ comment, issueId, author, members }: { comment: Comment; 
           </div>
         </div>
       ) : (
-        <Markdown source={comment.body} className="comment-body" />
+        <Markdown source={email ? email.body : comment.body} className="comment-body" />
       )}
       {confirm && (
         <ConfirmDialog

@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Download } from "lucide-react";
 import { useId, useState } from "react";
 import { Empty, Skeleton } from "../../components/Feedback";
-import { Avatar } from "../../components/icons";
+import { Avatar, teamOptionLabel } from "../../components/icons";
 import { api, errorMessage } from "../../lib/api";
 import { addDays, formatDueDate, toISODate } from "../../lib/format";
 import { paths } from "../../lib/paths";
@@ -113,7 +113,7 @@ export function TimePage() {
               <option value="">All teams</option>
               {teams.data?.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name}
+                  {teamOptionLabel(t)}
                 </option>
               ))}
             </select>

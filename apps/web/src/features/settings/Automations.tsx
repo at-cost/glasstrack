@@ -18,7 +18,7 @@ import { type ReactNode, useId, useState } from "react";
 import { Card } from "../../components/Card";
 import { ConfirmDialog, Dialog } from "../../components/Dialog";
 import { Empty, Skeleton } from "../../components/Feedback";
-import { Avatar, LabelDot, StatusIcon } from "../../components/icons";
+import { Avatar, LabelDot, StatusIcon, teamOptionLabel } from "../../components/icons";
 import { type Option, PickerButton } from "../../components/Picker";
 import { type AutomationInput, api, errorMessage } from "../../lib/api";
 import { fullTime, relativeTime } from "../../lib/format";
@@ -788,7 +788,7 @@ function RuleEditor({ id, initial, onClose }: { id: string | null; initial: Auto
               <option value="">All teams</option>
               {teams.data?.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name}
+                  {teamOptionLabel(t)}
                 </option>
               ))}
             </select>

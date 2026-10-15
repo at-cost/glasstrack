@@ -26,7 +26,7 @@ const queryClient = new QueryClient({
       // A lost session anywhere sends the user to sign in.
       if (err instanceof ApiError && err.status === 401 && !window.location.pathname.startsWith("/login")) {
         const redirect = window.location.pathname + window.location.search;
-        if (!["/", "/auth/verify", "/finances"].includes(window.location.pathname) && !window.location.pathname.startsWith("/invite/")) {
+        if (!["/", "/auth/verify", "/finances"].includes(window.location.pathname) && !/^\/(invite|forms)\//.test(window.location.pathname)) {
           router.navigate({ to: "/login", search: { redirect }, replace: true });
         }
       }
