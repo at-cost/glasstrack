@@ -24,7 +24,7 @@ import { ApiError, api, errorMessage } from "../../lib/api";
 import { fullTime, relativeTime } from "../../lib/format";
 import { paths } from "../../lib/paths";
 import { keys, useBilling, useLabels, useMembers, useStates, useTeams } from "../../lib/queries";
-import { setTheme, useTheme } from "../../lib/theme";
+import { setTheme, THEMES, type ThemeChoice, useTheme } from "../../lib/theme";
 import { toast, toastError } from "../../lib/toast";
 import { PageHeader } from "../issues/pages";
 import { useWs } from "../shell/context";
@@ -1074,14 +1074,24 @@ function Profile() {
       <Card title="Theme">
         <fieldset className="fieldset">
           <legend className="sr-only">Theme</legend>
-          <div className="radio-row">
-            {(["system", "light", "dark"] as const).map((t) => (
-              <label key={t} className="check-row">
-                <input type="radio" name="theme" checked={theme === t} onChange={() => setTheme(t)} />
-                {t === "system" ? "Match system" : t === "light" ? "Light" : "Dark"}
-              </label>
-            ))}
+          <div className="theme-grid">
+            {(["system", ...THEMES.map((t) => t.id)] as ThemeChoice[]).map((id) => {
+              const t = THEMES.find((x) => x.id === id);
+              const swatch = t ? t.swatch : ["#f5f2eb", "#2f5d50", "#1b1a18", "#7ab39f"];
+              return (
+                <label key={id} className={`theme-card${theme === id ? " is-selected" : ""}`}>
+                  <input type="radio" name="theme" className="sr-only" checked={theme === id} onChange={() => setTheme(id)} />
+                  <span className="theme-swatch" aria-hidden="true">
+                    {(["bg", "surface", "accent", "text"] as const).map((slot, i) => (
+                      <span key={slot} style={{ background: swatch[i] }} />
+                    ))}
+                  </span>
+                  <span className="theme-name">{t ? t.label : "Match device"}</span>
+                </label>
+              );
+            })}
           </div>
+          <p className="muted small">Saved on this device. "Match device" switches between Light and Dark with your system setting.</p>
         </fieldset>
       </Card>
     </>

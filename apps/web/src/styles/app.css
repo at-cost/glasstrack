@@ -2883,3 +2883,42 @@
     min-width: 120px;
   }
 }
+
+/* Theme picker */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+}
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+.theme-card:hover {
+  border-color: var(--border-strong);
+}
+.theme-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.theme-card:has(input:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+.theme-swatch {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  height: 32px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.theme-name {
+  font-size: 13px;
+  color: var(--text);
+}

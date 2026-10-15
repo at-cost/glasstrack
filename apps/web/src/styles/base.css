@@ -1,4 +1,4 @@
-/* Design tokens. Light is the default; dark follows the system unless data-theme is set. */
+/* Design tokens. Light is the default; with no data-theme the dark set follows the system. Themes: lib/theme.ts. */
 :root {
   color-scheme: light;
   --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -48,7 +48,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]) {
     color-scheme: dark;
     --bg: #1b1a18;
     --surface: #211f1d;
@@ -127,6 +127,130 @@
   --series-1: #4f8fd6;
   --series-2: #d0703a;
   --chart-ref: #8a8477;
+}
+
+/* Snow: cool, crisp light theme. */
+:root[data-theme="snow"] {
+  color-scheme: light;
+  --bg: #f4f6f9;
+  --surface: #fafbfd;
+  --surface-raised: #ffffff;
+  --surface-sunken: #e9edf3;
+  --sidebar: #eef1f6;
+  --hover: #e6eaf1;
+  --active: #dbe1ea;
+  --border: #d9dee7;
+  --border-strong: #bcc4d2;
+  --text: #16191f;
+  --text-2: #3d4452;
+  --text-3: #5d6574;
+  --accent: #2d5bd2;
+  --accent-hover: #234bb3;
+  --accent-text: #ffffff;
+  --accent-soft: #e1e9fb;
+  --accent-soft-text: #1d3f96;
+  --danger: #b4331f;
+  --danger-soft: #fbe3de;
+  --warning: #93620d;
+  --input-bg: #ffffff;
+  --input-text: #121418;
+  --input-border: #b9c1cf;
+  --placeholder: #6c7483;
+  --focus: #2d5bd2;
+  --shadow-sm: 0 1px 2px rgb(20 30 50 / 8%);
+  --shadow: 0 2px 6px rgb(20 30 50 / 8%), 0 8px 24px rgb(20 30 50 / 10%);
+  --shadow-lg: 0 12px 40px rgb(15 22 40 / 22%);
+  --on-status: #ffffff;
+  --avatar-l: 74%;
+  --avatar-fg: #1d222b;
+  --scrim: rgb(15 22 40 / 38%);
+  --positive: #23744a;
+  --series-1: #2d5bd2;
+  --series-2: #c2541c;
+  --chart-ref: #7d8696;
+}
+
+/* Midnight: cool blue-black dark theme. */
+:root[data-theme="midnight"] {
+  color-scheme: dark;
+  --bg: #0f141d;
+  --surface: #141a25;
+  --surface-raised: #1a2130;
+  --surface-sunken: #0b0f16;
+  --sidebar: #0b0f16;
+  --hover: #1c2433;
+  --active: #253045;
+  --border: #252e3f;
+  --border-strong: #38445a;
+  --text: #e4e9f2;
+  --text-2: #b9c2d3;
+  --text-3: #95a0b5;
+  --accent: #7ca7ff;
+  --accent-hover: #98baff;
+  --accent-text: #0a1222;
+  --accent-soft: #1d2b47;
+  --accent-soft-text: #b4ccff;
+  --danger: #f08b7a;
+  --danger-soft: #3a1f1d;
+  --warning: #e4b25c;
+  --input-bg: #0a0e15;
+  --input-text: #eef2f8;
+  --input-border: #3b4760;
+  --placeholder: #8691a6;
+  --focus: #98baff;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 35%);
+  --shadow: 0 2px 6px rgb(0 0 0 / 35%), 0 8px 24px rgb(0 0 0 / 40%);
+  --shadow-lg: 0 12px 40px rgb(0 0 0 / 60%);
+  --on-status: #0f141d;
+  --avatar-l: 44%;
+  --avatar-fg: #eef2f8;
+  --scrim: rgb(0 0 0 / 60%);
+  --positive: #7fcf9c;
+  --series-1: #7ca7ff;
+  --series-2: #e08a4f;
+  --chart-ref: #7f8aa0;
+}
+
+/* High contrast: black on white, strong borders and focus. */
+:root[data-theme="contrast"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f0f0f0;
+  --sidebar: #f4f4f4;
+  --hover: #e8e8e8;
+  --active: #d6d6d6;
+  --border: #6b6b6b;
+  --border-strong: #000000;
+  --text: #000000;
+  --text-2: #1a1a1a;
+  --text-3: #333333;
+  --accent: #0b4f3f;
+  --accent-hover: #063a2e;
+  --accent-text: #ffffff;
+  --accent-soft: #d3eae2;
+  --accent-soft-text: #002c22;
+  --danger: #8c1d0a;
+  --danger-soft: #fbe0da;
+  --warning: #6b4300;
+  --input-bg: #ffffff;
+  --input-text: #000000;
+  --input-border: #000000;
+  --placeholder: #4a4a4a;
+  --focus: #0041c2;
+  --focus-ring: 0 0 0 2px #ffffff, 0 0 0 5px var(--focus);
+  --shadow-sm: none;
+  --shadow: 0 0 0 1px #000000;
+  --shadow-lg: 0 0 0 2px #000000;
+  --on-status: #ffffff;
+  --avatar-l: 80%;
+  --avatar-fg: #000000;
+  --scrim: rgb(0 0 0 / 50%);
+  --positive: #0b5a2c;
+  --series-1: #0041c2;
+  --series-2: #a3300a;
+  --chart-ref: #4a4a4a;
 }
 
 *,
