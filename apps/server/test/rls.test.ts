@@ -86,6 +86,8 @@ beforeAll(async () => {
   await b.c.ok("POST", `/api/v1/w/bravo/issues/${bIssue.id}/timer/start`);
   const tpl = await b.c.ok("POST", "/api/v1/w/bravo/templates", { teamId: b.team.id, name: "t", title: "t" });
   await b.c.ok("POST", "/api/v1/w/bravo/recurring", { templateId: tpl.id, frequency: "weekly", startsOn: "2026-01-01" });
+  await b.c.ok("POST", "/api/v1/w/bravo/automations", { name: "auto", trigger: "comment_added", actions: [{ type: "set_priority", priority: 3 }] });
+  await b.c.ok("POST", `/api/v1/w/bravo/issues/${bIssue.id}/comments`, { body: "runs the automation" });
   await sql`INSERT INTO sso_configs (workspace_id, issuer, client_id, client_secret_enc, allowed_domains) VALUES (${bWorkspaceId}, 'https://idp.example', 'c', 'v1.x.y.z', '{b.example}')`.execute(h.deps.dbs.owner);
 });
 

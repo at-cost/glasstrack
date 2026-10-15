@@ -186,6 +186,7 @@ export async function runRecurring(deps: Deps, now = new Date()): Promise<number
         created++;
         const issue = await deps.dbs.system.selectFrom("issues as i").innerJoin("teams as t", "t.id", "i.teamId")
           .select(["i.id", "i.title", "i.number", "t.key"]).where("i.id", "=", issueId).executeTakeFirstOrThrow();
+        await deps.jobs.send("automation.event", { workspaceId: d.workspaceId, issueId, actorId: "", events: [{ type: "issue_created" }] }).catch(() => undefined);
         await enqueueWebhookEvent(deps, { id: d.workspaceId, slug: d.slug }, "issue.created", {
           issue: { id: issue.id, identifier: `${issue.key}-${issue.number}`, title: issue.title }, source: "recurring",
         });

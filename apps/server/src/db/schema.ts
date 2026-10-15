@@ -135,6 +135,7 @@ export interface IssuesTable {
   parentId: string | null;
   cycleId: string | null;
   dueDate: DateOnly | null;
+  startDate: DateOnly | null;
   estimate: Numeric | null;
   sortKey: string;
   createdAt: TsDefault;
@@ -499,6 +500,34 @@ export interface SsoConfigsTable {
   updatedAt: TsDefault;
 }
 
+export interface AutomationRulesTable {
+  id: string;
+  workspaceId: string;
+  teamId: string | null;
+  name: string;
+  enabled: Generated<boolean>;
+  trigger: string;
+  triggerConfig: Json<Record<string, unknown>>;
+  conditions: Json<Record<string, unknown>>;
+  actions: Json<Record<string, unknown>[]>;
+  runCount: Generated<number>;
+  lastRunAt: Ts | null;
+  lastError: string | null;
+  createdBy: string | null;
+  createdAt: TsDefault;
+  updatedAt: TsDefault;
+}
+export interface AutomationRunsTable {
+  id: Generated<string>;
+  workspaceId: string;
+  ruleId: string;
+  issueId: string | null;
+  status: "ok" | "error";
+  detail: Json<Record<string, unknown>>;
+  runKey: string | null;
+  createdAt: TsDefault;
+}
+
 export interface DB {
   users: UsersTable;
   authIdentities: AuthIdentitiesTable;
@@ -548,6 +577,8 @@ export interface DB {
   recurringIssues: RecurringIssuesTable;
   auditLog: AuditLogTable;
   ssoConfigs: SsoConfigsTable;
+  automationRules: AutomationRulesTable;
+  automationRuns: AutomationRunsTable;
 }
 
 export type UserRow = Selectable<UsersTable>;

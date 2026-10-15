@@ -6,6 +6,7 @@ import { forbidden, notFound } from "../lib/errors";
 import { uuid7 } from "../lib/ids";
 import { findIssue } from "./issues";
 import { queueWebhooks } from "./webhooks";
+import { queueAutomation } from "./issueService";
 import { createNotifications, resolveMentions, subscribe, subscribersOf } from "./notifyService";
 
 const toComment = (r: { id: string; issueId: string; authorId: string | null; bodyMd: string; createdAt: Date; editedAt: Date | null }): Comment => ({
@@ -48,6 +49,7 @@ export const commentRoutes = new Hono<AppEnv>()
     await trx.updateTable("issues").set({ updatedAt: new Date() }).where("id", "=", issue.id).execute();
     await notify(trx, ws.id, { t: "comment", id: row.id, issueId: issue.id });
     queueWebhooks(c, "comment.created", { comment: toComment(row), issue: { id: issue.id, identifier: issue.identifier, title: issue.title } });
+    queueAutomation(c, issue.id, user.id, [{ type: "comment_added" }]);
     return c.json(toComment(row), 201);
   })
   .patch("/comments/:id", async (c) => {

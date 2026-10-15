@@ -215,6 +215,8 @@ export async function cleanup(deps: Deps) {
   for (const e of expired) if (e.storageKey) await deps.storage.delete(e.storageKey).catch(() => undefined);
   if (expired.length) await sys.deleteFrom("exports").where("id", "in", expired.map((e) => e.id)).execute();
   await sys.deleteFrom("webhookDeliveries").where("createdAt", "<", new Date(Date.now() - 14 * 86_400_000)).execute();
+  // Keep run_key rows (they stop scheduled rules firing twice); prune the rest after 30 days.
+  await sys.deleteFrom("automationRuns").where("createdAt", "<", new Date(Date.now() - 30 * 86_400_000)).where("runKey", "is", null).execute();
 }
 
 export type Handlers = { [N in JobName]: (deps: Deps, data: JobPayloads[N]) => Promise<void> };
@@ -248,6 +250,14 @@ export const handlers: Handlers = {
   "recurring.tick": async (deps) => {
     const { runRecurring } = await import("../modules/templates");
     await runRecurring(deps);
+  },
+  "automation.event": async (deps, data) => {
+    const { runAutomations } = await import("../modules/automations");
+    await runAutomations(deps, data);
+  },
+  "automation.scheduled": async (deps) => {
+    const { runScheduledAutomations } = await import("../modules/automations");
+    await runScheduledAutomations(deps);
   },
   "backup.run": async (deps) => {
     const { runBackup } = await import("./backup");

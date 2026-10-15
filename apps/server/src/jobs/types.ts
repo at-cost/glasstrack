@@ -10,6 +10,8 @@ export interface JobPayloads {
   "finances.daily": Record<string, never>;
   "webhook.deliver": { deliveryId: string };
   "recurring.tick": Record<string, never>;
+  "automation.event": { workspaceId: string; issueId: string; actorId: string; events: import("@glasstrack/shared").AutomationEvent[] };
+  "automation.scheduled": Record<string, never>;
 }
 export type JobName = keyof JobPayloads;
 

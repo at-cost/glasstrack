@@ -29,6 +29,7 @@ import {
   categoryTimestamps,
   createIssueCore,
   NONE,
+  queueAutomation,
   recordActivity,
   setAssignees,
 } from "./issueService";
@@ -49,6 +50,7 @@ const ISSUE_COLUMNS = [
   "i.parentId",
   "i.cycleId",
   "i.dueDate",
+  "i.startDate",
   "i.estimate",
   "i.sortKey",
   "i.createdAt",
@@ -104,6 +106,7 @@ export function toIssue(r: IssueRowOut): Issue {
     parentId: r.parentId,
     cycleId: r.cycleId,
     dueDate: r.dueDate,
+    startDate: r.startDate,
     estimate: r.estimate === null ? null : Number(r.estimate),
     sortKey: r.sortKey,
     labelIds: r.labelIds ?? [],
@@ -283,6 +286,7 @@ export const issueRoutes = new Hono<AppEnv>()
     });
     const created = await findIssue(c, id);
     queueWebhooks(c, "issue.created", { issue: created });
+    queueAutomation(c, id, user.id, [{ type: "issue_created" }]);
     return c.json(created, 201);
   })
 
@@ -307,13 +311,18 @@ export const issueRoutes = new Hono<AppEnv>()
       set.descriptionMd = body.description;
       acts.push(["description", {}]);
     }
+    let newCategory: string | null = null;
     if (body.statusId !== undefined && body.statusId !== cur.statusId) {
-      const category = await assertState(trx, body.statusId, cur.teamId);
-      Object.assign(set, categoryTimestamps(category, raw));
+      newCategory = await assertState(trx, body.statusId, cur.teamId);
+      Object.assign(set, categoryTimestamps(newCategory, raw));
     }
+    const nextStart = body.startDate === undefined ? cur.startDate : body.startDate;
+    const nextDue = body.dueDate === undefined ? cur.dueDate : body.dueDate;
+    if (nextStart && nextDue && nextStart > nextDue) throw badRequest("The start date must be on or before the due date");
     diff("statusId", body.statusId, "statusId", "status");
     diff("priority", body.priority as Issue["priority"] | undefined, "priority", "priority");
     diff("dueDate", body.dueDate, "dueDate", "due_date");
+    diff("startDate", body.startDate, "startDate", "start_date");
     diff("estimate", body.estimate, "estimate", "estimate");
     if (body.cycleId) await assertCycle(trx, body.cycleId, cur.teamId);
     diff("cycleId", body.cycleId, "cycleId", "cycle");
@@ -371,6 +380,13 @@ export const issueRoutes = new Hono<AppEnv>()
       await createNotifications(trx, { workspaceId: ws.id, issueId: cur.id, actorId: user.id, kind: "mentioned", userIds: fresh });
     }
     const updated = await findIssue(c, cur.id);
+    const events: import("@glasstrack/shared").AutomationEvent[] = [];
+    if (newCategory && body.statusId) events.push({ type: "status_changed", toStatusId: body.statusId, toCategory: newCategory as never });
+    const labelAct = acts.find(([k]) => k === "labels");
+    if (labelAct && (labelAct[1].added as string[]).length) events.push({ type: "label_added", labelIds: labelAct[1].added as string[] });
+    if (acts.some(([k]) => k === "priority")) events.push({ type: "priority_changed" });
+    if (acts.some(([k]) => k === "assignees")) events.push({ type: "assignees_changed" });
+    queueAutomation(c, cur.id, user.id, events);
     if (acts.length) {
       await notify(trx, ws.id, { t: "issue", id: cur.id });
       queueWebhooks(c, "issue.updated", { issue: updated, changes: acts.map(([kind, data]) => ({ field: kind, ...data })) });
@@ -423,7 +439,11 @@ export const issueRoutes = new Hono<AppEnv>()
     }
     await notify(trx, ws.id, { t: "issue", id: cur.id });
     const moved = await findIssue(c, cur.id);
-    if (set.statusId) queueWebhooks(c, "issue.updated", { issue: moved, changes: [{ field: "status", from: cur.statusId, to: statusId }] });
+    if (set.statusId) {
+      queueWebhooks(c, "issue.updated", { issue: moved, changes: [{ field: "status", from: cur.statusId, to: statusId }] });
+      const category = (await trx.selectFrom("workflowStates").select("category").where("id", "=", statusId).executeTakeFirstOrThrow()).category;
+      queueAutomation(c, cur.id, user.id, [{ type: "status_changed", toStatusId: statusId, toCategory: category }]);
+    }
     return c.json(moved);
   })
 
@@ -508,6 +528,21 @@ export const issueRoutes = new Hono<AppEnv>()
     const rows = await c.get("trx").selectFrom("activity").select(["id", "issueId", "actorId", "kind", "data", "createdAt"])
       .where("issueId", "=", cur.id).orderBy("id").limit(1000).execute();
     return c.json(rows.map((r): Activity => ({ ...r, createdAt: r.createdAt.toISOString() })));
+  })
+
+  /** All links of a type between visible issues (timeline dependencies). */
+  .get("/relations", async (c) => {
+    const visible = await visibleTeamIds(c);
+    const type = c.req.query("type") ?? "blocks";
+    let q = c.get("trx").selectFrom("issueRelations as r").innerJoin("issues as a", "a.id", "r.issueId").innerJoin("issues as b", "b.id", "r.relatedIssueId")
+      .select(["r.id", "r.issueId", "r.relatedIssueId", "r.type"]).where("r.type", "=", type as "blocks");
+    const team = c.req.query("team");
+    if (team) q = q.where((eb) => eb.or([eb("a.teamId", "=", team), eb("b.teamId", "=", team)]));
+    if (visible) {
+      const ids = visible.length ? visible : [NONE];
+      q = q.where("a.teamId", "in", ids).where("b.teamId", "in", ids);
+    }
+    return c.json(await q.limit(5000).execute());
   })
 
   .get("/search", async (c) => {

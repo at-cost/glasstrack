@@ -14,6 +14,8 @@ import { stripeWebhookRoutes } from "./billing/webhook";
 import { sessionMiddleware } from "./auth/session";
 import { ssoAuthRoutes, ssoSettingsRoutes } from "./auth/sso";
 import { auditRoutes } from "./modules/audit";
+import { automationRoutes } from "./modules/automations";
+import { reportRoutes } from "./modules/reports";
 import { fieldRoutes } from "./modules/fields";
 import { templateRoutes } from "./modules/templates";
 import { timeRoutes } from "./modules/time";
@@ -135,6 +137,8 @@ export function createApp(deps: Deps) {
   ws.route("/", templateRoutes);
   ws.route("/", auditRoutes);
   ws.route("/", ssoSettingsRoutes);
+  ws.route("/", automationRoutes);
+  ws.route("/", reportRoutes);
   api.route("/w/:slug", ws);
   api.all("*", (c) => c.json({ error: { code: "not_found", message: "Not found" } }, 404));
   app.route("/api/v1", api);

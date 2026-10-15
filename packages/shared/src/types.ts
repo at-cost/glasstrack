@@ -76,6 +76,7 @@ export interface Issue {
   parentId: string | null;
   cycleId: string | null;
   dueDate: string | null;
+  startDate: string | null;
   estimate: number | null;
   sortKey: string;
   labelIds: string[];

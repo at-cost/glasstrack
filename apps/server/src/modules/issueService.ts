@@ -15,6 +15,7 @@ export interface IssueInput {
   assigneeIds: string[];
   labelIds: string[];
   dueDate?: string | null;
+  startDate?: string | null;
   estimate?: number | null;
   parentId?: string | null;
   cycleId?: string | null;
@@ -115,6 +116,7 @@ export async function createIssueCore(
   await assertLabels(trx, input.labelIds, input.teamId);
   if (input.cycleId) await assertCycle(trx, input.cycleId, input.teamId);
   if (input.parentId) await assertParent(trx, null, input.parentId);
+  if (input.startDate && input.dueDate && input.startDate > input.dueDate) throw badRequest("The start date must be on or before the due date");
   const fieldValues = await validateFieldValues(trx, input.teamId, input.fields);
   const counter = await trx.updateTable("teams").set((eb) => ({ issueCounter: eb("issueCounter", "+", 1) }))
     .where("id", "=", input.teamId).returning("issueCounter").executeTakeFirstOrThrow();
@@ -132,6 +134,7 @@ export async function createIssueCore(
     parentId: input.parentId ?? null,
     cycleId: input.cycleId ?? null,
     dueDate: input.dueDate ?? null,
+    startDate: input.startDate ?? null,
     estimate: input.estimate ?? null,
     sortKey: keyBetween(await lastSortKey(trx, input.teamId), null),
     ...categoryTimestamps(category, {}),
@@ -151,3 +154,16 @@ export async function createIssueCore(
 }
 
 export { NONE };
+
+/** Queues automation rules for an issue after the request commits (see automations.ts). */
+export function queueAutomation(
+  c: { get(k: "afterCommit"): (() => Promise<unknown>)[]; get(k: "deps"): import("../context").Deps; get(k: "ws"): { id: string } },
+  issueId: string,
+  actorId: string,
+  events: import("@glasstrack/shared").AutomationEvent[],
+) {
+  if (events.length === 0) return;
+  const deps = c.get("deps");
+  const workspaceId = c.get("ws").id;
+  c.get("afterCommit").push(() => deps.jobs.send("automation.event", { workspaceId, issueId, actorId, events }).catch(() => undefined));
+}
