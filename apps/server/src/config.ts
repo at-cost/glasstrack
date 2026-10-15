@@ -66,6 +66,8 @@ const schema = z.object({
   E2E_TEST_LOGIN: bool.default(false),
   /** Allow webhooks to private network addresses (self-hosted LANs). Off for hosted. */
   WEBHOOK_ALLOW_PRIVATE: bool.default(false),
+  /** Allow SSO providers on private networks (self-hosted Keycloak/Authentik on a LAN). Off for hosted. */
+  SSO_ALLOW_PRIVATE: bool.default(false),
 });
 
 export type Config = z.infer<typeof schema> & {

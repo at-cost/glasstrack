@@ -7,6 +7,7 @@ import { badRequest, notFound } from "../lib/errors";
 import { newToken, uuid7 } from "../lib/ids";
 import { logger } from "../lib/logger";
 import { assertPublicUrl } from "../lib/ssrf";
+import { audit } from "./audit";
 
 export const WEBHOOK_EVENTS = ["issue.created", "issue.updated", "issue.deleted", "comment.created"] as const;
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
@@ -18,24 +19,27 @@ export function signPayload(secret: string, body: string, ts = Math.floor(Date.n
   return `t=${ts},v1=${createHmac("sha256", secret).update(`${ts}.${body}`).digest("hex")}`;
 }
 
+/** Records deliveries for every active webhook subscribed to `event` and queues them. */
+export async function enqueueWebhookEvent(deps: Deps, ws: { id: string; slug: string }, event: WebhookEvent, data: Record<string, unknown>) {
+  try {
+    const hooks = await deps.dbs.system.selectFrom("webhooks").select("id").where("workspaceId", "=", ws.id).where("active", "=", true)
+      .where(sql<boolean>`${event} = ANY(events)`).execute();
+    for (const h of hooks) {
+      const id = uuid7();
+      const payload = { id, event, createdAt: new Date().toISOString(), workspace: { slug: ws.slug }, data };
+      await deps.dbs.system.insertInto("webhookDeliveries").values({ id, workspaceId: ws.id, webhookId: h.id, event, payload: JSON.stringify(payload) }).execute();
+      await deps.jobs.send("webhook.deliver", { deliveryId: id });
+    }
+  } catch (err) {
+    logger.error({ err, event }, "could not queue webhooks");
+  }
+}
+
 /** Queues deliveries after the request commits, so receivers never see rolled-back changes. */
 export function queueWebhooks(c: Ctx, event: WebhookEvent, data: Record<string, unknown>) {
   const deps = c.get("deps");
   const ws = c.get("ws");
-  c.get("afterCommit").push(async () => {
-    try {
-      const hooks = await deps.dbs.system.selectFrom("webhooks").select("id").where("workspaceId", "=", ws.id).where("active", "=", true)
-        .where(sql<boolean>`${event} = ANY(events)`).execute();
-      for (const h of hooks) {
-        const id = uuid7();
-        const payload = { id, event, createdAt: new Date().toISOString(), workspace: { slug: ws.slug }, data };
-        await deps.dbs.system.insertInto("webhookDeliveries").values({ id, workspaceId: ws.id, webhookId: h.id, event, payload: JSON.stringify(payload) }).execute();
-        await deps.jobs.send("webhook.deliver", { deliveryId: id });
-      }
-    } catch (err) {
-      logger.error({ err, event }, "could not queue webhooks");
-    }
-  });
+  c.get("afterCommit").push(() => enqueueWebhookEvent(deps, ws, event, data));
 }
 
 /** One delivery attempt. Throws on failure so the queue retries, until the last attempt. */
@@ -110,6 +114,7 @@ export const webhookRoutes = new Hono<AppEnv>()
     const id = uuid7();
     const secret = `whsec_${newToken()}`;
     await c.get("trx").insertInto("webhooks").values({ id, workspaceId: c.get("ws").id, url: body.url, secret, events: body.events, active: body.active, createdBy: user.id }).execute();
+    await audit(c, "webhook.created", "webhook", id, { url: body.url, events: body.events });
     return c.json({ id, url: body.url, events: body.events, active: body.active, secret }, 201);
   })
   .patch("/webhooks/:id", async (c) => {
@@ -125,11 +130,13 @@ export const webhookRoutes = new Hono<AppEnv>()
     const r = await c.get("trx").updateTable("webhooks").set({ ...body, ...(body.active ? { consecutiveFailures: 0 } : {}) })
       .where("id", "=", c.req.param("id")).executeTakeFirst();
     if (!r.numUpdatedRows) throw notFound("Webhook not found");
+    await audit(c, "webhook.updated", "webhook", c.req.param("id"), body);
     return c.json({ ok: true });
   })
   .delete("/webhooks/:id", async (c) => {
     requireRole(c, "admin");
     await c.get("trx").deleteFrom("webhooks").where("id", "=", c.req.param("id")).execute();
+    await audit(c, "webhook.deleted", "webhook", c.req.param("id"));
     return c.json({ ok: true });
   })
   .get("/webhooks/:id/deliveries", async (c) => {

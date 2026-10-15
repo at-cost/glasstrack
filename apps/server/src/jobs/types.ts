@@ -9,6 +9,7 @@ export interface JobPayloads {
   "billing.fees": Record<string, never>;
   "finances.daily": Record<string, never>;
   "webhook.deliver": { deliveryId: string };
+  "recurring.tick": Record<string, never>;
 }
 export type JobName = keyof JobPayloads;
 

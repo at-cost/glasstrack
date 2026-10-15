@@ -18,6 +18,8 @@ import { asUser, notify, type Tx } from "../db/tenant";
 import { layout } from "../email";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../lib/errors";
 import { newToken, sha256, uuid7 } from "../lib/ids";
+import { audit } from "./audit";
+import { auditSystem } from "./audit";
 
 const INVITE_DAYS = 7;
 
@@ -150,6 +152,7 @@ export const workspaceRootRoutes = new Hono<AppEnv>()
         .execute();
       // Email invites are single-use; link invites stay valid until they expire or are revoked.
       if (inv.email) await trx.updateTable("invites").set({ acceptedAt: new Date() }).where("id", "=", inv.id).execute();
+      await auditSystem(trx, { workspaceId: inv.workspaceId, actorId: user.id, actorLabel: user.email, action: "invite.accepted", targetType: "invite", targetId: inv.id, data: { role: inv.role } });
       return { slug: inv.slug };
     });
     return c.json(result);
@@ -163,6 +166,7 @@ export const workspaceRoutes = new Hono<AppEnv>()
     const body = updateWorkspaceSchema.parse(await c.req.json());
     const trx = c.get("trx");
     await trx.updateTable("workspaces").set({ name: body.name }).where("id", "=", c.get("ws").id).execute();
+    await audit(c, "workspace.renamed", "workspace", c.get("ws").id, { from: c.get("ws").name, to: body.name });
     return c.json({ ...c.get("ws"), name: body.name });
   })
   .delete("/", async (c) => {
@@ -171,6 +175,7 @@ export const workspaceRoutes = new Hono<AppEnv>()
     const { confirm } = z.object({ confirm: z.string() }).parse(await c.req.json());
     if (confirm !== ws.slug) throw badRequest("Type the workspace URL name to confirm deletion");
     // Status changes are owned by the system role; the deletion job removes all data.
+    await audit(c, "workspace.deletion_requested", "workspace", ws.id);
     await c.get("deps").dbs.system.updateTable("workspaces").set({ status: "deleting" }).where("id", "=", ws.id).execute();
     c.get("afterCommit").push(() => c.get("deps").jobs.send("workspace.delete", { workspaceId: ws.id }));
     return c.json({ ok: true });
@@ -190,6 +195,7 @@ export const workspaceRoutes = new Hono<AppEnv>()
     }
     await trx.updateTable("workspaceMembers").set({ role }).where("userId", "=", userId)
       .where("workspaceId", "=", c.get("ws").id).execute();
+    await audit(c, "member.role_changed", "user", userId, { from: cur.role, to: role });
     await notify(trx, c.get("ws").id, { t: "member", id: userId });
     return c.json({ ok: true });
   })
@@ -205,8 +211,9 @@ export const workspaceRoutes = new Hono<AppEnv>()
     if (cur.role === "admin" && (await adminCount(trx)) <= 1) throw badRequest("A workspace needs at least one admin");
     await trx.deleteFrom("teamMembers").where("userId", "=", userId).execute();
     await trx.deleteFrom("issueSubscribers").where("userId", "=", userId).execute();
-    await trx.updateTable("issues").set({ assigneeId: null }).where("assigneeId", "=", userId).execute();
+    await trx.deleteFrom("issueAssignees").where("userId", "=", userId).execute();
     await trx.deleteFrom("workspaceMembers").where("userId", "=", userId).where("workspaceId", "=", ws.id).execute();
+    await audit(c, userId === user.id ? "member.left" : "member.removed", "user", userId, { role: cur.role });
     await notify(trx, ws.id, { t: "member", id: userId });
     c.get("deps").hub.kick(ws.id, userId);
     return c.json({ ok: true });
@@ -245,6 +252,7 @@ export const workspaceRoutes = new Hono<AppEnv>()
       .insertInto("invites")
       .values({ id, workspaceId: ws.id, email: body.email ?? null, tokenHash: sha256(token), role: body.role, invitedBy: user.id, expiresAt })
       .execute();
+    await audit(c, "invite.created", "invite", id, { email: body.email ?? null, role: body.role, link: !body.email });
     const url = `${deps.config.APP_URL.replace(/\/$/, "")}/invite/${token}`;
     if (body.email) {
       const { text, html } = layout(
@@ -267,5 +275,6 @@ export const workspaceRoutes = new Hono<AppEnv>()
   .delete("/invites/:id", async (c) => {
     requireRole(c, "admin");
     await c.get("trx").updateTable("invites").set({ revokedAt: new Date() }).where("id", "=", c.req.param("id")).execute();
+    await audit(c, "invite.revoked", "invite", c.req.param("id"));
     return c.json({ ok: true });
   });

@@ -30,6 +30,10 @@ export interface SessionUser {
   name: string;
   avatarUrl: string | null;
   sessionId: string;
+  /** How this session signed in (magic_link, google, github, sso, token...). */
+  authMethod?: string;
+  /** Set when the session came from a workspace's SSO. */
+  ssoWorkspaceId?: string | null;
 }
 
 export type AppEnv = {

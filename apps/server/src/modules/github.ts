@@ -5,6 +5,7 @@ import { type AppEnv, requireRole, requireUser } from "../context";
 import { asWorkspace, notify, type Tx } from "../db/tenant";
 import { ApiError } from "../lib/errors";
 import { newToken, uuid7 } from "../lib/ids";
+import { audit } from "./audit";
 
 /** Finds issue keys like ENG-123 in text. */
 export function findIssueKeys(...texts: (string | null | undefined)[]): { key: string; number: number }[] {
@@ -114,11 +115,13 @@ export const githubSettingsRoutes = new Hono<AppEnv>()
     const secret = !existing || body.rotateSecret ? newToken() : existing.secret;
     await trx.insertInto("githubIntegrations").values({ workspaceId: ws.id, secret, moveOnMerge: body.moveOnMerge, createdBy: user.id })
       .onConflict((oc) => oc.column("workspaceId").doUpdateSet({ secret, moveOnMerge: body.moveOnMerge })).execute();
+    await audit(c, existing ? "github.updated" : "github.enabled", "integration", ws.id, { moveOnMerge: body.moveOnMerge, rotatedSecret: Boolean(existing && body.rotateSecret) });
     return c.json({ enabled: true, webhookUrl: `${c.get("deps").config.APP_URL.replace(/\/$/, "")}/api/v1/github/webhook/${ws.id}`, secret, moveOnMerge: body.moveOnMerge });
   })
   .delete("/integrations/github", async (c) => {
     requireRole(c, "admin");
     await c.get("trx").deleteFrom("githubIntegrations").where("workspaceId", "=", c.get("ws").id).execute();
+    await audit(c, "github.disabled", "integration", c.get("ws").id);
     return c.json({ ok: true });
   });
 

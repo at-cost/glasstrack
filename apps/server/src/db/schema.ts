@@ -46,6 +46,8 @@ export interface SessionsTable {
   createdAt: TsDefault;
   lastSeenAt: TsDefault;
   expiresAt: Ts;
+  authMethod: Generated<string>;
+  ssoWorkspaceId: string | null;
 }
 export interface WorkspacesTable {
   id: string;
@@ -129,7 +131,6 @@ export interface IssuesTable {
   descriptionMd: Generated<string>;
   statusId: string;
   priority: Generated<number>;
-  assigneeId: string | null;
   creatorId: string | null;
   parentId: string | null;
   cycleId: string | null;
@@ -399,6 +400,105 @@ export interface GithubIntegrationsTable {
   createdAt: TsDefault;
 }
 
+export interface IssueAssigneesTable {
+  workspaceId: string;
+  issueId: string;
+  userId: string;
+  createdAt: TsDefault;
+}
+export interface CustomFieldsTable {
+  id: string;
+  workspaceId: string;
+  teamId: string | null;
+  name: string;
+  type: "text" | "number" | "select" | "multi_select" | "date" | "checkbox" | "url" | "user";
+  options: Json<{ id: string; name: string; color?: string }[]>;
+  position: Generated<number>;
+  createdAt: TsDefault;
+  archivedAt: Ts | null;
+}
+export interface IssueFieldValuesTable {
+  workspaceId: string;
+  issueId: string;
+  fieldId: string;
+  value: Json<unknown>;
+}
+export interface TimeEntriesTable {
+  id: string;
+  workspaceId: string;
+  issueId: string;
+  userId: string | null;
+  spentOn: DateOnly;
+  minutes: number;
+  note: string | null;
+  createdAt: TsDefault;
+}
+export interface ActiveTimersTable {
+  workspaceId: string;
+  userId: string;
+  issueId: string;
+  startedAt: TsDefault;
+}
+export interface IssueTemplatesTable {
+  id: string;
+  workspaceId: string;
+  teamId: string;
+  name: string;
+  title: string;
+  descriptionMd: Generated<string>;
+  statusId: string | null;
+  priority: Generated<number>;
+  labelIds: ColumnType<string[], string[] | undefined, string[]>;
+  assigneeIds: ColumnType<string[], string[] | undefined, string[]>;
+  estimate: Numeric | null;
+  fieldValues: Json<Record<string, unknown>>;
+  createdBy: string | null;
+  createdAt: TsDefault;
+  updatedAt: TsDefault;
+}
+export interface RecurringIssuesTable {
+  id: string;
+  workspaceId: string;
+  templateId: string;
+  frequency: "daily" | "weekly" | "monthly" | "yearly";
+  interval: Generated<number>;
+  weekdays: ColumnType<number[], number[] | undefined, number[]>;
+  monthDay: number | null;
+  hour: Generated<number>;
+  timezone: Generated<string>;
+  startsOn: DateOnly;
+  nextRunAt: Ts;
+  lastRunAt: Ts | null;
+  lastIssueId: string | null;
+  active: Generated<boolean>;
+  createdBy: string | null;
+  createdAt: TsDefault;
+}
+export interface AuditLogTable {
+  id: Generated<string>;
+  workspaceId: string;
+  actorId: string | null;
+  actorLabel: string;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  data: Json<Record<string, unknown>>;
+  ip: string | null;
+  createdAt: TsDefault;
+}
+export interface SsoConfigsTable {
+  workspaceId: string;
+  issuer: string;
+  clientId: string;
+  clientSecretEnc: string;
+  allowedDomains: ColumnType<string[], string[] | undefined, string[]>;
+  autoJoinRole: "member" | "guest" | null;
+  enforce: Generated<boolean>;
+  enabled: Generated<boolean>;
+  createdAt: TsDefault;
+  updatedAt: TsDefault;
+}
+
 export interface DB {
   users: UsersTable;
   authIdentities: AuthIdentitiesTable;
@@ -439,6 +539,15 @@ export interface DB {
   webhookDeliveries: WebhookDeliveriesTable;
   issueLinks: IssueLinksTable;
   githubIntegrations: GithubIntegrationsTable;
+  issueAssignees: IssueAssigneesTable;
+  customFields: CustomFieldsTable;
+  issueFieldValues: IssueFieldValuesTable;
+  timeEntries: TimeEntriesTable;
+  activeTimers: ActiveTimersTable;
+  issueTemplates: IssueTemplatesTable;
+  recurringIssues: RecurringIssuesTable;
+  auditLog: AuditLogTable;
+  ssoConfigs: SsoConfigsTable;
 }
 
 export type UserRow = Selectable<UsersTable>;

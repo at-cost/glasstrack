@@ -7,6 +7,7 @@ import { badRequest } from "../lib/errors";
 import { uuid7 } from "../lib/ids";
 import { assertTeamAccess } from "../modules/teams";
 import { guessCategory, type ParsedImport, parseJiraCsv, parseLinearCsv, parseTrelloJson } from "./parse";
+import { audit } from "../modules/audit";
 
 const MAX_ISSUES = 5000;
 const MAX_COMMENTS = 50_000;
@@ -89,12 +90,17 @@ export async function runImport(c: Ctx, teamId: string, parsed: ParsedImport, so
     const created = it.createdAt ?? new Date().toISOString();
     return {
       id, workspaceId: ws.id, teamId, number: firstNumber + i, title: it.title.slice(0, 300), descriptionMd: it.description.slice(0, 100_000),
-      statusId, priority: it.priority, assigneeId: who(it.assignee), creatorId: user.id, dueDate: it.dueDate, estimate: it.estimate,
+      statusId, priority: it.priority, creatorId: user.id, dueDate: it.dueDate, estimate: it.estimate,
       sortKey: keys[i]!, createdAt: created, updatedAt: created,
       completedAt: category === "completed" ? created : null, canceledAt: category === "canceled" ? created : null,
     };
   });
   for (let i = 0; i < rows.length; i += 500) await trx.insertInto("issues").values(rows.slice(i, i + 500)).execute();
+  const assignees = parsed.issues.flatMap((it) => {
+    const userId = who(it.assignee);
+    return userId ? [{ workspaceId: ws.id, issueId: idByExternal.get(it.externalId)!, userId }] : [];
+  });
+  for (let i = 0; i < assignees.length; i += 1000) await trx.insertInto("issueAssignees").values(assignees.slice(i, i + 1000)).execute();
 
   const issueLabels = parsed.issues.flatMap((it) => [...new Set(it.labels.map((l) => labelByName.get(l.toLowerCase())!))].map((labelId) => ({ workspaceId: ws.id, issueId: idByExternal.get(it.externalId)!, labelId })));
   for (let i = 0; i < issueLabels.length; i += 1000) await trx.insertInto("issueLabels").values(issueLabels.slice(i, i + 1000)).execute();
@@ -137,5 +143,7 @@ export const importRoutes = new Hono<AppEnv>().post("/import", async (c) => {
   } catch (err) {
     throw badRequest(String((err as Error).message));
   }
-  return c.json(await runImport(c, body.teamId, parsed, body.source, body.dryRun));
+  const result = await runImport(c, body.teamId, parsed, body.source, body.dryRun);
+  if (!body.dryRun) await audit(c, "import.completed", "team", body.teamId, { source: body.source, issues: result.issues, comments: result.comments });
+  return c.json(result);
 });

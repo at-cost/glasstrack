@@ -6,7 +6,7 @@ import { newToken, sha256, uuid7 } from "../lib/ids";
 const SESSION_DAYS = 30;
 export const cookieName = (deps: Deps) => (deps.config.secureCookies ? "__Host-glasstrack_session" : "glasstrack_session");
 
-export async function createSession(c: Ctx, userId: string): Promise<void> {
+export async function createSession(c: Ctx, userId: string, opts: { authMethod?: string; ssoWorkspaceId?: string | null } = {}): Promise<void> {
   const deps = c.get("deps");
   const token = newToken();
   await deps.dbs.system
@@ -17,6 +17,8 @@ export async function createSession(c: Ctx, userId: string): Promise<void> {
       tokenHash: sha256(token),
       userAgent: c.req.header("user-agent")?.slice(0, 300) ?? null,
       expiresAt: new Date(Date.now() + SESSION_DAYS * 86400_000),
+      authMethod: opts.authMethod ?? "unknown",
+      ssoWorkspaceId: opts.ssoWorkspaceId ?? null,
     })
     .execute();
   setCookie(c, cookieName(deps), token, {
@@ -44,13 +46,13 @@ export const sessionMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
     const row = await deps.dbs.system
       .selectFrom("sessions as s")
       .innerJoin("users as u", "u.id", "s.userId")
-      .select(["s.id as sessionId", "s.lastSeenAt", "u.id", "u.email", "u.name", "u.avatarUrl"])
+      .select(["s.id as sessionId", "s.lastSeenAt", "s.authMethod", "s.ssoWorkspaceId", "u.id", "u.email", "u.name", "u.avatarUrl"])
       .where("s.tokenHash", "=", sha256(token))
       .where("s.expiresAt", ">", new Date())
       .where("u.deletedAt", "is", null)
       .executeTakeFirst();
     if (row) {
-      c.set("user", { id: row.id, email: row.email, name: row.name, avatarUrl: row.avatarUrl, sessionId: row.sessionId });
+      c.set("user", { id: row.id, email: row.email, name: row.name, avatarUrl: row.avatarUrl, sessionId: row.sessionId, authMethod: row.authMethod, ssoWorkspaceId: row.ssoWorkspaceId });
       // Sliding expiry, written at most once an hour.
       if (Date.now() - row.lastSeenAt.getTime() > 3600_000) {
         await deps.dbs.system

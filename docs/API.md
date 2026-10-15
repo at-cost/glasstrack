@@ -22,14 +22,21 @@ Workspace endpoints live under `/api/v1/w/:slug`. Issues can be addressed by key
 |---|---|---|
 | GET | `/me` | You and your workspaces |
 | GET | `/w/:slug/teams` · `/states` · `/labels` · `/cycles` · `/members` | Workspace structure |
-| GET | `/w/:slug/issues?team=&status=&assignee=me&label=&priority=1,2&cycle=active&q=` | List and filter (`limit`, `offset`, `order=manual\|priority\|updated\|created`) |
-| POST | `/w/:slug/issues` | Create: `{teamId, title, description?, statusId?, priority?, assigneeId?, labelIds?, dueDate?, estimate?, parentId?, cycleId?}` |
+| GET | `/w/:slug/issues?team=&status=&assignee=me&label=&priority=1,2&cycle=active&q=&field=<fieldId>:<value>` | List and filter (`limit`, `offset`, `order=manual\|priority\|updated\|created`) |
+| POST | `/w/:slug/issues` | Create: `{teamId, title, description?, statusId?, priority?, assigneeIds?, labelIds?, dueDate?, estimate?, parentId?, cycleId?, fields?}` |
 | GET / PATCH / DELETE | `/w/:slug/issues/:ref` | Read (with sub-issues, links, attachments), update any field, delete |
 | POST | `/w/:slug/issues/:ref/move` | `{statusId?, afterId?, beforeId?}` |
 | GET / POST | `/w/:slug/issues/:ref/comments` | Markdown comments, `@handle` mentions |
 | GET | `/w/:slug/issues/:ref/activity` | Full history |
 | GET | `/w/:slug/search?q=` | Full-text search |
 | POST | `/w/:slug/import` | Import (see below) |
+| GET / POST / PATCH / DELETE | `/w/:slug/fields[/:id]` | Custom fields (admins manage): `text`, `number`, `select`, `multi_select`, `date`, `checkbox`, `url`, `user` |
+| GET / POST | `/w/:slug/issues/:ref/time` | Time entries: `{minutes, spentOn, note?}`; edit or delete with `/w/:slug/time/:id` |
+| POST | `/w/:slug/issues/:ref/timer/start`, `/w/:slug/timer/stop` | Start or stop your timer (one per person; starting stops the last) |
+| GET | `/w/:slug/time?from=&to=&team=&user=` | Time report with totals per person and per issue |
+| GET / POST / PATCH / DELETE | `/w/:slug/templates[/:id]` | Issue templates |
+| GET / POST / PATCH / DELETE | `/w/:slug/recurring[/:id]` | Recurring issues from a template: `{templateId, frequency, interval, weekdays, monthDay, hour, timezone, startsOn}` |
+| GET | `/w/:slug/audit`, `/w/:slug/audit.csv` | Audit log (admins) |
 
 ## Webhooks
 
@@ -67,3 +74,14 @@ Statuses are matched by name (missing ones are created with a guessed category),
 In **Settings → GitHub**, turn on the integration to get a webhook URL and secret. In your repository: Settings → Webhooks → Add webhook, content type `application/json`, the secret, and "Pull requests" events.
 
 Mention an issue key (for example `ENG-12`) in a pull request's title, description or branch name to link it. When the pull request is merged, the issue moves to the team's first Done status (you can turn that off).
+
+## Single sign-on (OIDC)
+
+Free on every Glasstrack server, self-hosted or hosted. Admins set it up in **Settings → Single sign-on** with their identity provider's issuer URL, a client ID and secret, and the company email domains. Register the app in the provider with the redirect URI shown there (`$APP_URL/api/v1/auth/sso/callback`) and the scopes `openid email profile`. Works with Okta, Microsoft Entra ID, Google Workspace, Keycloak, Authentik, Auth0 and any standard OpenID Connect provider.
+
+- **Auto-join:** people from the listed domains join as members or guests on first sign-in. Without it, they need an invite.
+- **SSO only:** members must sign in through SSO. Admins can still use other methods, so a broken setup can always be fixed.
+- Client secrets are stored encrypted (AES-256-GCM, key derived from `APP_SECRET`).
+- Self-hosted providers on a private network need `SSO_ALLOW_PRIVATE=true`.
+
+SAML is not supported yet; most providers that offer SAML also offer OIDC.

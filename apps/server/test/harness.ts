@@ -62,13 +62,35 @@ export async function createHarness(overrides: Record<string, string> = {}) {
   };
 }
 
-/** Minimal cookie-keeping client for app.request(). */
+/** Cookie-keeping client for app.request(). */
 export class Client {
-  cookie = "";
+  jar = new Map<string, string>();
   constructor(
     private h: Harness,
     private origin = "http://localhost:3999",
   ) {}
+
+  get cookie(): string {
+    return [...this.jar].map(([k, v]) => `${k}=${v}`).join("; ");
+  }
+  set cookie(v: string) {
+    this.jar.clear();
+    for (const part of v.split(";").map((p) => p.trim()).filter(Boolean)) {
+      const i = part.indexOf("=");
+      if (i > 0) this.jar.set(part.slice(0, i), part.slice(i + 1));
+    }
+  }
+
+  absorb(res: Response) {
+    for (const sc of res.headers.getSetCookie()) {
+      const pair = sc.split(";")[0]!;
+      const i = pair.indexOf("=");
+      const name = pair.slice(0, i);
+      const value = pair.slice(i + 1);
+      if (!value || /max-age=0/i.test(sc) || /expires=thu, 01 jan 1970/i.test(sc)) this.jar.delete(name);
+      else this.jar.set(name, value);
+    }
+  }
 
   async req(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
     const res = await this.h.app.request(path, {
@@ -81,12 +103,7 @@ export class Client {
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    const set = res.headers.get("set-cookie");
-    if (set) {
-      const pair = set.split(";")[0]!;
-      if (pair.endsWith("=")) this.cookie = "";
-      else this.cookie = pair;
-    }
+    this.absorb(res);
     const text = await res.text();
     let json: any = null;
     try {

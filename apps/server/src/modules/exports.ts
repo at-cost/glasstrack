@@ -3,6 +3,7 @@ import type { ExportJob } from "@glasstrack/shared";
 import { type AppEnv, requireRole, requireUser } from "../context";
 import { ApiError, notFound } from "../lib/errors";
 import { uuid7 } from "../lib/ids";
+import { audit } from "./audit";
 
 export const exportRoutes = new Hono<AppEnv>()
   .get("/exports", async (c) => {
@@ -33,6 +34,7 @@ export const exportRoutes = new Hono<AppEnv>()
     if (running) throw new ApiError(409, "export_running", "An export is already being prepared");
     const id = uuid7();
     await trx.insertInto("exports").values({ id, workspaceId: c.get("ws").id, requestedBy: user.id }).execute();
+    await audit(c, "export.requested", "export", id);
     const workspaceId = c.get("ws").id;
     c.get("afterCommit").push(() => c.get("deps").jobs.send("export.workspace", { exportId: id, workspaceId }));
     return c.json({ id, status: "pending", createdAt: new Date().toISOString(), downloadUrl: null } satisfies ExportJob, 202);

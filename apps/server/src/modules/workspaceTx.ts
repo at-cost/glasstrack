@@ -31,6 +31,13 @@ export const workspaceTx: MiddlewareHandler<AppEnv> = async (c, next) => {
     ) {
       throw new ApiError(402, "read_only", "This workspace is read-only until its balance is topped up.");
     }
+    // "SSO only" workspaces: members (not admins, so a broken setup can be fixed) must arrive via this workspace's SSO.
+    if (ws.role !== "admin" && !tokenWs) {
+      const sso = await sql<{ enforce: boolean }>`SELECT enforce FROM sso_configs WHERE workspace_id = ${ws.id} AND enabled`.execute(trx);
+      if (sso.rows[0]?.enforce && user.ssoWorkspaceId !== ws.id) {
+        throw new ApiError(403, "sso_required", "This workspace requires single sign-on. Sign in with SSO to continue.");
+      }
+    }
     c.set("trx", trx);
     c.set("ws", ws);
     deps.meter.countApi(ws.id);

@@ -12,6 +12,11 @@ import { adminRoutes, publicFinanceRoutes } from "./finances/routes";
 import { billingRoutes } from "./billing/routes";
 import { stripeWebhookRoutes } from "./billing/webhook";
 import { sessionMiddleware } from "./auth/session";
+import { ssoAuthRoutes, ssoSettingsRoutes } from "./auth/sso";
+import { auditRoutes } from "./modules/audit";
+import { fieldRoutes } from "./modules/fields";
+import { templateRoutes } from "./modules/templates";
+import { timeRoutes } from "./modules/time";
 import { bearerMiddleware } from "./auth/tokens";
 import { tokenRoutes } from "./modules/tokens";
 import { webhookRoutes } from "./modules/webhooks";
@@ -101,6 +106,7 @@ export function createApp(deps: Deps) {
     return bodyLimit({ maxSize })(c, next);
   });
 
+  api.route("/auth/sso", ssoAuthRoutes);
   api.route("/auth", authRoutes);
   api.route("/stripe", stripeWebhookRoutes);
   api.route("/public", publicFinanceRoutes);
@@ -124,6 +130,11 @@ export function createApp(deps: Deps) {
   ws.route("/", webhookRoutes);
   ws.route("/", importRoutes);
   ws.route("/", githubSettingsRoutes);
+  ws.route("/", fieldRoutes);
+  ws.route("/", timeRoutes);
+  ws.route("/", templateRoutes);
+  ws.route("/", auditRoutes);
+  ws.route("/", ssoSettingsRoutes);
   api.route("/w/:slug", ws);
   api.all("*", (c) => c.json({ error: { code: "not_found", message: "Not found" } }, 404));
   app.route("/api/v1", api);

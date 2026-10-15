@@ -206,12 +206,12 @@ describe("issues", () => {
     expect(i.statusId).toBe(states.find((s) => s.name === "Backlog")!.id);
     const done = states.find((s) => s.category === "completed")!;
     const up = await c.ok("PATCH", `/api/v1/w/acme/issues/${i.id}`, {
-      title: "renamed", statusId: done.id, priority: 1, assigneeId: me.id, labelIds: [label.id], dueDate: "2026-12-01", estimate: 3,
+      title: "renamed", statusId: done.id, priority: 1, assigneeIds: [me.id], labelIds: [label.id], dueDate: "2026-12-01", estimate: 3,
     });
-    expect(up).toMatchObject({ title: "renamed", statusId: done.id, priority: 1, assigneeId: me.id, labelIds: [label.id], dueDate: "2026-12-01", estimate: 3 });
+    expect(up).toMatchObject({ title: "renamed", statusId: done.id, priority: 1, assigneeIds: [me.id], labelIds: [label.id], dueDate: "2026-12-01", estimate: 3 });
     expect(up.completedAt).not.toBeNull();
     const acts = await c.ok("GET", `/api/v1/w/acme/issues/${i.id}/activity`);
-    expect(acts.map((a: { kind: string }) => a.kind)).toEqual(["created", "title", "status", "priority", "assignee", "due_date", "estimate", "labels"]);
+    expect(acts.map((a: { kind: string }) => a.kind)).toEqual(["created", "title", "status", "priority", "due_date", "estimate", "labels", "assignees"]);
     const back = await c.ok("PATCH", `/api/v1/w/acme/issues/${i.id}`, { statusId: states[1]!.id });
     expect(back.completedAt).toBeNull();
   });
@@ -280,7 +280,7 @@ describe("issues", () => {
     const me = await c.ok("GET", "/api/v1/me");
     const bug = await c.ok("POST", "/api/v1/w/acme/labels", { name: "bug", color: "#aa0000" });
     const cycle = await c.ok("POST", `/api/v1/w/acme/teams/${team.id}/cycles`, { startsOn: "2020-01-01", endsOn: "2099-01-01" });
-    await c.ok("POST", "/api/v1/w/acme/issues", { teamId: team.id, title: "Login page crashes", labelIds: [bug.id], priority: 1, assigneeId: me.id, cycleId: cycle.id });
+    await c.ok("POST", "/api/v1/w/acme/issues", { teamId: team.id, title: "Login page crashes", labelIds: [bug.id], priority: 1, assigneeIds: [me.id], cycleId: cycle.id });
     await c.ok("POST", "/api/v1/w/acme/issues", { teamId: team.id, title: "Dark mode", description: "users want a darker theme" });
     const third = await c.ok("POST", "/api/v1/w/acme/issues", { teamId: team.id, title: "Export button", statusId: states[2]!.id });
     await c.ok("POST", `/api/v1/w/acme/issues/${third.id}/comments`, { body: "the zebra pattern breaks here" });
@@ -354,7 +354,7 @@ describe("comments and notifications", () => {
     expect(inbox.map((n: { kind: string }) => n.kind)).toEqual(["mentioned"]);
     expect(inbox[0].issueIdentifier).toBe("ACME-1");
 
-    await c.ok("PATCH", `/api/v1/w/acme/issues/${i.id}`, { assigneeId: benId });
+    await c.ok("PATCH", `/api/v1/w/acme/issues/${i.id}`, { assigneeIds: [benId] });
     await c.ok("POST", `/api/v1/w/acme/issues/${i.id}/comments`, { body: "any update @ben?" });
     await c.ok("POST", `/api/v1/w/acme/issues/${i.id}/comments`, { body: "plain comment" });
     await c.ok("PATCH", `/api/v1/w/acme/issues/${i.id}`, { statusId: states[2]!.id });

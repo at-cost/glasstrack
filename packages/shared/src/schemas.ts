@@ -71,7 +71,10 @@ export const createIssueSchema = z.object({
   description: z.string().max(100_000).default(""),
   statusId: uuid.optional(),
   priority: priority.default(0),
-  assigneeId: uuid.nullish(),
+  assigneeIds: z.array(uuid).max(10).default([]),
+  /** Custom field values by field id. */
+  fields: z.record(uuid, z.unknown()).default({}),
+  templateId: uuid.optional(),
   labelIds: z.array(uuid).max(20).default([]),
   dueDate: dateOnly.nullish(),
   estimate: z.number().min(0).max(1000).nullish(),
@@ -83,7 +86,9 @@ export const updateIssueSchema = z.object({
   description: z.string().max(100_000).optional(),
   statusId: uuid.optional(),
   priority: priority.optional(),
-  assigneeId: uuid.nullable().optional(),
+  assigneeIds: z.array(uuid).max(10).optional(),
+  /** Custom field values by field id; null clears a value. */
+  fields: z.record(uuid, z.unknown()).optional(),
   labelIds: z.array(uuid).max(20).optional(),
   dueDate: dateOnly.nullable().optional(),
   estimate: z.number().min(0).max(1000).nullable().optional(),
@@ -107,6 +112,8 @@ export const issueFilterSchema = z.object({
   q: z.string().max(200).optional(),
   parent: uuid.optional(),
   includeArchived: z.boolean().optional(),
+  /** Custom field filters as "fieldId:value" (value "none" = empty). */
+  field: z.array(z.string().max(300)).optional(),
 });
 export type IssueFilter = z.infer<typeof issueFilterSchema>;
 
@@ -131,4 +138,65 @@ export const attachmentRequestSchema = z.object({
   filename: z.string().trim().min(1).max(200),
   contentType: z.string().max(100),
   size: z.number().int().min(1).max(100 * 1024 * 1024),
+});
+
+export const CUSTOM_FIELD_TYPES = ["text", "number", "select", "multi_select", "date", "checkbox", "url", "user"] as const;
+export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
+const fieldOption = z.object({ id: z.string().min(1).max(40), name: z.string().trim().min(1).max(60), color: color.optional() });
+export const customFieldSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  type: z.enum(CUSTOM_FIELD_TYPES),
+  teamId: uuid.nullish(),
+  options: z.array(fieldOption).max(100).default([]),
+});
+export const updateCustomFieldSchema = z.object({
+  name: z.string().trim().min(1).max(60).optional(),
+  options: z.array(fieldOption).max(100).optional(),
+  position: z.number().optional(),
+});
+
+export const timeEntrySchema = z.object({
+  minutes: z.number().int().min(1).max(1440),
+  spentOn: dateOnly,
+  note: z.string().trim().max(500).optional(),
+});
+
+export const issueTemplateSchema = z.object({
+  teamId: uuid,
+  name: z.string().trim().min(1).max(80),
+  title: z.string().trim().min(1).max(300),
+  description: z.string().max(100_000).default(""),
+  statusId: uuid.nullish(),
+  priority: priority.default(0),
+  labelIds: z.array(uuid).max(20).default([]),
+  assigneeIds: z.array(uuid).max(10).default([]),
+  estimate: z.number().min(0).max(1000).nullish(),
+  fields: z.record(uuid, z.unknown()).default({}),
+});
+export const updateIssueTemplateSchema = issueTemplateSchema.omit({ teamId: true }).partial();
+
+export const RECURRENCE_FREQUENCIES = ["daily", "weekly", "monthly", "yearly"] as const;
+export const recurringIssueSchema = z.object({
+  templateId: uuid,
+  frequency: z.enum(RECURRENCE_FREQUENCIES),
+  interval: z.number().int().min(1).max(365).default(1),
+  /** 0 = Sunday ... 6 = Saturday, for weekly. */
+  weekdays: z.array(z.number().int().min(0).max(6)).max(7).default([]),
+  monthDay: z.number().int().min(1).max(31).nullish(),
+  hour: z.number().int().min(0).max(23).default(9),
+  timezone: z.string().max(60).default("UTC"),
+  startsOn: dateOnly,
+  active: z.boolean().default(true),
+});
+export const updateRecurringIssueSchema = recurringIssueSchema.omit({ templateId: true }).partial();
+
+export const ssoConfigSchema = z.object({
+  issuer: z.url().max(500),
+  clientId: z.string().trim().min(1).max(300),
+  /** Omit to keep the stored secret. */
+  clientSecret: z.string().min(1).max(2000).optional(),
+  allowedDomains: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/)).max(20).default([]),
+  autoJoinRole: z.enum(["member", "guest"]).nullable().default(null),
+  enforce: z.boolean().default(false),
+  enabled: z.boolean().default(true),
 });

@@ -69,7 +69,9 @@ export interface Issue {
   description: string;
   statusId: string;
   priority: Priority;
-  assigneeId: string | null;
+  assigneeIds: string[];
+  /** Custom field values by field id. */
+  fields: Record<string, unknown>;
   creatorId: string;
   parentId: string | null;
   cycleId: string | null;
@@ -98,7 +100,10 @@ export interface IssueLink {
 }
 export interface IssueDetail extends Issue {
   links: IssueLink[];
-  children: Pick<Issue, "id" | "identifier" | "title" | "statusId" | "assigneeId">[];
+  children: Pick<Issue, "id" | "identifier" | "title" | "statusId" | "assigneeIds">[];
+  /** Total logged time in minutes, and the viewer's running timer on this issue. */
+  timeSpentMinutes: number;
+  myTimerStartedAt: string | null;
   relations: IssueRelation[];
   attachments: Attachment[];
   subscribed: boolean;
@@ -169,4 +174,71 @@ export interface RealtimeEvent {
 }
 export interface ApiError {
   error: { code: string; message: string };
+}
+
+export interface CustomField {
+  id: string;
+  teamId: string | null;
+  name: string;
+  type: "text" | "number" | "select" | "multi_select" | "date" | "checkbox" | "url" | "user";
+  options: { id: string; name: string; color?: string }[];
+  position: number;
+}
+export interface TimeEntry {
+  id: string;
+  issueId: string;
+  userId: string | null;
+  spentOn: string;
+  minutes: number;
+  note: string | null;
+  createdAt: string;
+}
+export interface IssueTemplate {
+  id: string;
+  teamId: string;
+  name: string;
+  title: string;
+  description: string;
+  statusId: string | null;
+  priority: number;
+  labelIds: string[];
+  assigneeIds: string[];
+  estimate: number | null;
+  fields: Record<string, unknown>;
+}
+export interface RecurringIssue {
+  id: string;
+  templateId: string;
+  frequency: "daily" | "weekly" | "monthly" | "yearly";
+  interval: number;
+  weekdays: number[];
+  monthDay: number | null;
+  hour: number;
+  timezone: string;
+  startsOn: string;
+  nextRunAt: string;
+  lastRunAt: string | null;
+  lastIssueId: string | null;
+  active: boolean;
+}
+export interface AuditEntry {
+  id: string;
+  actorId: string | null;
+  actorLabel: string;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  data: Record<string, unknown>;
+  ip: string | null;
+  createdAt: string;
+}
+export interface SsoConfig {
+  enabled: boolean;
+  issuer: string;
+  clientId: string;
+  hasSecret: boolean;
+  allowedDomains: string[];
+  autoJoinRole: "member" | "guest" | null;
+  enforce: boolean;
+  callbackUrl: string;
 }

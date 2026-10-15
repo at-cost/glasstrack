@@ -20,11 +20,22 @@ import { notify, type Tx } from "../db/tenant";
 import { badRequest, conflict, notFound } from "../lib/errors";
 import { isUuid, uuid7 } from "../lib/ids";
 import { attachmentsFor } from "./attachments";
+import { validateFieldValues, writeFieldValues } from "./fields";
+import {
+  assertCycle,
+  assertMembers,
+  assertParent,
+  assertState,
+  categoryTimestamps,
+  createIssueCore,
+  NONE,
+  recordActivity,
+  setAssignees,
+} from "./issueService";
 import { queueWebhooks } from "./webhooks";
 import { createNotifications, resolveMentions, subscribe, subscribersOf } from "./notifyService";
+import { assertLabels } from "./issueService";
 import { assertTeamAccess, visibleTeamIds } from "./teams";
-
-const NONE = "00000000-0000-0000-0000-000000000000";
 
 const ISSUE_COLUMNS = [
   "i.id",
@@ -34,7 +45,6 @@ const ISSUE_COLUMNS = [
   "i.descriptionMd",
   "i.statusId",
   "i.priority",
-  "i.assigneeId",
   "i.creatorId",
   "i.parentId",
   "i.cycleId",
@@ -59,6 +69,20 @@ function baseQuery(trx: Tx) {
         .select(sql<string[]>`coalesce(array_agg(il.label_id ORDER BY il.label_id), '{}')`.as("labelIds"))
         .whereRef("il.issueId", "=", "i.id")
         .as("labelIds"),
+    )
+    .select((eb) =>
+      eb
+        .selectFrom("issueAssignees as ia")
+        .select(sql<string[]>`coalesce(array_agg(ia.user_id ORDER BY ia.created_at, ia.user_id), '{}')`.as("assigneeIds"))
+        .whereRef("ia.issueId", "=", "i.id")
+        .as("assigneeIds"),
+    )
+    .select((eb) =>
+      eb
+        .selectFrom("issueFieldValues as fv")
+        .select(sql<Record<string, unknown>>`coalesce(jsonb_object_agg(fv.field_id, fv.value), '{}'::jsonb)`.as("fields"))
+        .whereRef("fv.issueId", "=", "i.id")
+        .as("fields"),
     );
 }
 
@@ -74,7 +98,8 @@ export function toIssue(r: IssueRowOut): Issue {
     description: r.descriptionMd,
     statusId: r.statusId,
     priority: r.priority as Issue["priority"],
-    assigneeId: r.assigneeId,
+    assigneeIds: r.assigneeIds ?? [],
+    fields: r.fields ?? {},
     creatorId: r.creatorId ?? "",
     parentId: r.parentId,
     cycleId: r.cycleId,
@@ -124,8 +149,9 @@ export function applyFilters(q: ReturnType<typeof baseQuery>, f: IssueFilter, us
     const wantNone = f.assignee.includes("none");
     q = q.where((eb) => {
       const ors = [];
-      if (ids.length) ors.push(eb("i.assigneeId", "in", ids));
-      if (wantNone) ors.push(eb("i.assigneeId", "is", null));
+      const any = eb.selectFrom("issueAssignees as fa").select("fa.issueId").whereRef("fa.issueId", "=", "i.id");
+      if (ids.length) ors.push(eb.exists(any.where("fa.userId", "in", ids)));
+      if (wantNone) ors.push(eb.not(eb.exists(any)));
       return eb.or(ors);
     });
   }
@@ -133,6 +159,19 @@ export function applyFilters(q: ReturnType<typeof baseQuery>, f: IssueFilter, us
     q = q.where((eb) =>
       eb.exists(eb.selectFrom("issueLabels as fl").select("fl.issueId").whereRef("fl.issueId", "=", "i.id").where("fl.labelId", "in", f.label!)),
     );
+  }
+  for (const spec of f.field ?? []) {
+    const i = spec.indexOf(":");
+    const fieldId = spec.slice(0, i);
+    const value = spec.slice(i + 1);
+    if (i < 0 || !/^[0-9a-f-]{36}$/i.test(fieldId)) continue;
+    if (value === "none") {
+      q = q.where(sql<boolean>`NOT EXISTS (SELECT 1 FROM issue_field_values cf WHERE cf.issue_id = i.id AND cf.field_id = ${fieldId})`);
+    } else {
+      // Matches a single value, a member of a multi-select array, or a checkbox/number written as text.
+      q = q.where(sql<boolean>`EXISTS (SELECT 1 FROM issue_field_values cf WHERE cf.issue_id = i.id AND cf.field_id = ${fieldId}
+        AND (cf.value #>> '{}' = ${value} OR cf.value @> ${JSON.stringify([value])}::jsonb))`);
+    }
   }
   if (f.cycle === "none") q = q.where("i.cycleId", "is", null);
   else if (f.cycle === "active") {
@@ -176,69 +215,16 @@ export function filterFromQuery(c: Ctx): IssueFilter {
     q: c.req.query("q") || undefined,
     parent: c.req.query("parent") || undefined,
     includeArchived: c.req.query("includeArchived") === "true" || undefined,
+    field: c.req.queries("field")?.filter(Boolean),
   });
-}
-
-async function recordActivity(trx: Tx, workspaceId: string, issueId: string, actorId: string, kind: string, data: Record<string, unknown> = {}) {
-  await trx.insertInto("activity").values({ workspaceId, issueId, actorId, kind, data: JSON.stringify(data) }).execute();
-}
-
-async function assertMember(trx: Tx, userId: string) {
-  const m = await trx.selectFrom("workspaceMembers").select("userId").where("userId", "=", userId)
-    .where("workspaceId", "=", sql<string>`app.ws()`).executeTakeFirst();
-  if (!m) throw badRequest("Assignee must be a workspace member");
-}
-
-async function assertState(trx: Tx, statusId: string, teamId: string) {
-  const s = await trx.selectFrom("workflowStates").select(["teamId", "category"]).where("id", "=", statusId).executeTakeFirst();
-  if (!s || s.teamId !== teamId) throw badRequest("Status does not belong to this team");
-  return s.category;
-}
-
-async function assertLabels(trx: Tx, labelIds: string[], teamId: string) {
-  if (labelIds.length === 0) return;
-  const rows = await trx.selectFrom("labels").select(["id", "teamId"]).where("id", "in", labelIds).execute();
-  if (rows.length !== new Set(labelIds).size || rows.some((l) => l.teamId && l.teamId !== teamId)) {
-    throw badRequest("Unknown label or label from another team");
-  }
-}
-
-async function assertCycle(trx: Tx, cycleId: string, teamId: string) {
-  const cy = await trx.selectFrom("cycles").select("teamId").where("id", "=", cycleId).executeTakeFirst();
-  if (!cy || cy.teamId !== teamId) throw badRequest("Cycle does not belong to this team");
-}
-
-/** Rejects a parent that doesn't exist or would create a loop. */
-async function assertParent(trx: Tx, issueId: string | null, parentId: string) {
-  const r = await sql<{ id: string }>`
-    WITH RECURSIVE chain AS (
-      SELECT id, parent_id, 1 AS depth FROM issues WHERE id = ${parentId}
-      UNION ALL
-      SELECT i.id, i.parent_id, c.depth + 1 FROM issues i JOIN chain c ON i.id = c.parent_id WHERE c.depth < 50
-    ) SELECT id FROM chain`.execute(trx);
-  if (r.rows.length === 0) throw badRequest("Parent issue not found");
-  if (issueId && r.rows.some((x) => x.id === issueId)) throw badRequest("An issue can't be its own ancestor");
-}
-
-function categoryTimestamps(category: string, prev: { startedAt?: Date | null }) {
-  const now = new Date();
-  return {
-    startedAt: category === "started" ? (prev.startedAt ?? now) : category === "backlog" || category === "unstarted" ? null : (prev.startedAt ?? null),
-    completedAt: category === "completed" ? now : null,
-    canceledAt: category === "canceled" ? now : null,
-  };
-}
-
-async function lastSortKey(trx: Tx, teamId: string): Promise<string | null> {
-  const r = await trx.selectFrom("issues").select((eb) => eb.fn.max("sortKey").as("k")).where("teamId", "=", teamId).executeTakeFirst();
-  return (r?.k as string | null) ?? null;
 }
 
 export async function detail(c: Ctx, issue: Issue): Promise<IssueDetail> {
   const trx = c.get("trx");
   const user = requireUser(c);
   const children = await trx.selectFrom("issues as i").innerJoin("teams as t", "t.id", "i.teamId")
-    .select(["i.id", "i.number", "t.key", "i.title", "i.statusId", "i.assigneeId"])
+    .select(["i.id", "i.number", "t.key", "i.title", "i.statusId"])
+    .select((eb) => eb.selectFrom("issueAssignees as ca").select(sql<string[]>`coalesce(array_agg(ca.user_id), '{}')`.as("a")).whereRef("ca.issueId", "=", "i.id").as("assigneeIds"))
     .where("i.parentId", "=", issue.id).where("i.archivedAt", "is", null).orderBy("i.sortKey").execute();
   const outgoing = await trx.selectFrom("issueRelations as r").innerJoin("issues as o", "o.id", "r.relatedIssueId")
     .innerJoin("teams as t", "t.id", "o.teamId")
@@ -256,11 +242,15 @@ export async function detail(c: Ctx, issue: Issue): Promise<IssueDetail> {
   });
   const sub = await trx.selectFrom("issueSubscribers").select("userId").where("issueId", "=", issue.id)
     .where("userId", "=", user.id).executeTakeFirst();
+  const spent = await trx.selectFrom("timeEntries").select(sql<string>`coalesce(sum(minutes), 0)`.as("m")).where("issueId", "=", issue.id).executeTakeFirstOrThrow();
+  const timer = await trx.selectFrom("activeTimers").select("startedAt").where("issueId", "=", issue.id).where("userId", "=", user.id).executeTakeFirst();
   const links = await trx.selectFrom("issueLinks").select(["id", "provider", "url", "title", "state"]).where("issueId", "=", issue.id).orderBy("createdAt").execute();
   return {
     ...issue,
     links,
-    children: children.map((ch) => ({ id: ch.id, identifier: `${ch.key}-${ch.number}`, title: ch.title, statusId: ch.statusId, assigneeId: ch.assigneeId })),
+    children: children.map((ch) => ({ id: ch.id, identifier: `${ch.key}-${ch.number}`, title: ch.title, statusId: ch.statusId, assigneeIds: ch.assigneeIds ?? [] })),
+    timeSpentMinutes: Number(spent.m),
+    myTimerStartedAt: timer?.startedAt.toISOString() ?? null,
     relations: [...outgoing.map(rel("outgoing")), ...incoming.map(rel("incoming"))],
     attachments: await attachmentsFor(c, issue.id),
     subscribed: Boolean(sub),
@@ -286,54 +276,11 @@ export const issueRoutes = new Hono<AppEnv>()
   .post("/issues", async (c) => {
     const user = requireUser(c);
     const body = createIssueSchema.parse(await c.req.json());
-    const trx = c.get("trx");
     const ws = c.get("ws");
-    await assertTeamAccess(c, body.teamId);
-    let statusId = body.statusId;
-    if (statusId) await assertState(trx, statusId, body.teamId);
-    else {
-      const s = await trx.selectFrom("workflowStates").select("id").where("teamId", "=", body.teamId)
-        .orderBy(sql`CASE category WHEN 'backlog' THEN 0 WHEN 'unstarted' THEN 1 ELSE 2 END`).orderBy("position").executeTakeFirst();
-      if (!s) throw badRequest("Team has no statuses");
-      statusId = s.id;
-    }
-    const category = await assertState(trx, statusId, body.teamId);
-    if (body.assigneeId) await assertMember(trx, body.assigneeId);
-    await assertLabels(trx, body.labelIds, body.teamId);
-    if (body.cycleId) await assertCycle(trx, body.cycleId, body.teamId);
-    if (body.parentId) await assertParent(trx, null, body.parentId);
-    const counter = await trx.updateTable("teams").set((eb) => ({ issueCounter: eb("issueCounter", "+", 1) }))
-      .where("id", "=", body.teamId).returning("issueCounter").executeTakeFirstOrThrow();
-    const id = uuid7();
-    await trx.insertInto("issues").values({
-      id,
-      workspaceId: ws.id,
-      teamId: body.teamId,
-      number: counter.issueCounter,
-      title: body.title,
-      descriptionMd: body.description,
-      statusId,
-      priority: body.priority,
-      assigneeId: body.assigneeId ?? null,
-      creatorId: user.id,
-      parentId: body.parentId ?? null,
-      cycleId: body.cycleId ?? null,
-      dueDate: body.dueDate ?? null,
-      estimate: body.estimate ?? null,
-      sortKey: keyBetween(await lastSortKey(trx, body.teamId), null),
-      ...categoryTimestamps(category, {}),
-    }).execute();
-    if (body.labelIds.length) {
-      await trx.insertInto("issueLabels").values(body.labelIds.map((labelId) => ({ workspaceId: ws.id, issueId: id, labelId }))).execute();
-    }
-    await recordActivity(trx, ws.id, id, user.id, "created");
-    const mentioned = await resolveMentions(trx, body.description);
-    await subscribe(trx, ws.id, id, [user.id, body.assigneeId, ...mentioned]);
-    if (body.assigneeId) {
-      await createNotifications(trx, { workspaceId: ws.id, issueId: id, actorId: user.id, kind: "assigned", userIds: [body.assigneeId] });
-    }
-    await createNotifications(trx, { workspaceId: ws.id, issueId: id, actorId: user.id, kind: "mentioned", userIds: mentioned });
-    await notify(trx, ws.id, { t: "issue", id });
+    const id = await createIssueCore(c.get("trx"), {
+      workspaceId: ws.id, actorId: user.id, visible: await visibleTeamIds(c), input: body,
+      activity: body.templateId ? { templateId: body.templateId } : {},
+    });
     const created = await findIssue(c, id);
     queueWebhooks(c, "issue.created", { issue: created });
     return c.json(created, 201);
@@ -366,8 +313,6 @@ export const issueRoutes = new Hono<AppEnv>()
     }
     diff("statusId", body.statusId, "statusId", "status");
     diff("priority", body.priority as Issue["priority"] | undefined, "priority", "priority");
-    if (body.assigneeId) await assertMember(trx, body.assigneeId);
-    diff("assigneeId", body.assigneeId, "assigneeId", "assignee");
     diff("dueDate", body.dueDate, "dueDate", "due_date");
     diff("estimate", body.estimate, "estimate", "estimate");
     if (body.cycleId) await assertCycle(trx, body.cycleId, cur.teamId);
@@ -391,12 +336,28 @@ export const issueRoutes = new Hono<AppEnv>()
         if (!Object.keys(set).length) await trx.updateTable("issues").set({ updatedAt: new Date() }).where("id", "=", cur.id).execute();
       }
     }
+    let touched = Object.keys(set).length > 0;
+    if (body.assigneeIds) {
+      await assertMembers(trx, body.assigneeIds);
+      const { added, removed } = await setAssignees(trx, ws.id, cur.id, body.assigneeIds);
+      if (added.length || removed.length) {
+        acts.push(["assignees", { added, removed }]);
+        touched = true;
+        await subscribe(trx, ws.id, cur.id, added);
+        await createNotifications(trx, { workspaceId: ws.id, issueId: cur.id, actorId: user.id, kind: "assigned", userIds: added });
+      }
+    }
+    if (body.fields) {
+      const values = await validateFieldValues(trx, cur.teamId, body.fields);
+      const changed = await writeFieldValues(trx, ws.id, cur.id, values, cur.fields);
+      for (const fieldId of changed) {
+        acts.push(["field", { fieldId, from: cur.fields[fieldId] ?? null, to: values.get(fieldId) ?? null }]);
+        touched = true;
+      }
+    }
+    if (touched && !Object.keys(set).length) await trx.updateTable("issues").set({ updatedAt: new Date() }).where("id", "=", cur.id).execute();
     for (const [kind, data] of acts) await recordActivity(trx, ws.id, cur.id, user.id, kind, data);
 
-    if (body.assigneeId && body.assigneeId !== cur.assigneeId) {
-      await subscribe(trx, ws.id, cur.id, [body.assigneeId]);
-      await createNotifications(trx, { workspaceId: ws.id, issueId: cur.id, actorId: user.id, kind: "assigned", userIds: [body.assigneeId] });
-    }
     if (body.statusId && body.statusId !== cur.statusId) {
       await createNotifications(trx, {
         workspaceId: ws.id, issueId: cur.id, actorId: user.id, kind: "status_changed",

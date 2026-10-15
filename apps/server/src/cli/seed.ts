@@ -101,7 +101,7 @@ if (existing) {
     const who = n % 4 === 0 ? me : people[n % 3]!.id;
     created.push(await api("POST", w("/issues"), {
       teamId: team.id, title, statusId: st(team.id, status), priority, labelIds: ls.map((l) => labels[l]),
-      assigneeId: n % 5 === 4 ? null : who, cycleId: n < 8 ? cycle.id : null,
+      assigneeIds: n % 5 === 4 ? [] : n % 6 === 1 ? [who, me] : [who], cycleId: n < 8 ? cycle.id : null,
       description: `Context for **${title.toLowerCase()}**.\n\n- Steps to reproduce or scope\n- Expected result\n\ncc @sam`,
       dueDate: n % 3 === 0 ? day(n) : null, estimate: (n % 5) + 1,
     }));

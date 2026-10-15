@@ -5,6 +5,7 @@ import { type AppEnv, requireRole, requireUser } from "../context";
 import { ApiError, badRequest } from "../lib/errors";
 import { uuid7 } from "../lib/ids";
 import { balanceMicro, currentPriceMicro, ensureBillingAccount, storageBytes } from "./service";
+import { audit } from "../modules/audit";
 
 const n = (v: unknown) => Number(v ?? 0);
 
@@ -80,6 +81,7 @@ export const billingRoutes = new Hono<AppEnv>()
         successUrl: `${back}?topup=success`, cancelUrl: `${back}?topup=cancelled`,
       });
       await sys.updateTable("payments").set({ stripeCheckoutSessionId: session.id }).where("id", "=", paymentId).execute();
+      await audit(c, "billing.topup_started", "payment", paymentId, { amountUsd: body.amountUsd, saveCard: body.saveCard });
       return c.json({ url: session.url });
     } catch (err) {
       await sys.updateTable("payments").set({ status: "failed" }).where("id", "=", paymentId).execute();
@@ -103,5 +105,6 @@ export const billingRoutes = new Hono<AppEnv>()
     await trx.updateTable("billingAccounts")
       .set({ autoTopupEnabled: body.enabled, autoTopupThresholdMicro: usdToMicro(body.thresholdUsd), autoTopupAmountMicro: usdToMicro(body.amountUsd), updatedAt: new Date() })
       .where("workspaceId", "=", ws.id).execute();
+    await audit(c, "billing.auto_topup_changed", "billing", ws.id, body);
     return c.json({ ok: true });
   });

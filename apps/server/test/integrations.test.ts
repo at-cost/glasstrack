@@ -189,7 +189,7 @@ describe("importers", () => {
     expect(issues.map((i: { identifier: string }) => i.identifier)).toEqual(["ACME-1", "ACME-2", "ACME-3"]);
     const me = await c.ok("GET", "/api/v1/me");
     const parent = issues.find((i: { title: string }) => i.title === "Parent task");
-    expect(parent).toMatchObject({ assigneeId: me.id, priority: 2, createdAt: "2025-01-02T10:00:00.000Z" });
+    expect(parent).toMatchObject({ assigneeIds: [me.id], priority: 2, createdAt: "2025-01-02T10:00:00.000Z" });
     expect(issues.find((i: { title: string }) => i.title === "Child task").parentId).toBe(parent.id);
     const states = await c.ok("GET", "/api/v1/w/acme/states");
     expect(states.find((s: { name: string }) => s.name === "Shipped").category).toBe("completed");

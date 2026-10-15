@@ -162,7 +162,7 @@ export const authRoutes = new Hono<AppEnv>()
       .executeTakeFirst();
     if (!link) throw new ApiError(400, "invalid_link", "This sign-in link is invalid or has expired.");
     const userId = await findOrCreateUser(deps.dbs.system, { email: link.email });
-    await createSession(c, userId);
+    await createSession(c, userId, { authMethod: "magic_link" });
     return c.json({ redirectTo: safeRedirect(link.redirectTo) });
   })
 
@@ -225,7 +225,7 @@ export const authRoutes = new Hono<AppEnv>()
         .onConflict((oc) => oc.columns(["provider", "providerUserId"]).doNothing())
         .execute();
     }
-    await createSession(c, userId);
+    await createSession(c, userId, { authMethod: name });
     return c.redirect(redirectTo);
   })
 
@@ -240,6 +240,6 @@ export const authRoutes = new Hono<AppEnv>()
     if (!deps.config.E2E_TEST_LOGIN || deps.config.NODE_ENV === "production") throw notFound();
     const body = z.object({ email: emailSchema, name: z.string().optional() }).parse(await c.req.json());
     const userId = await findOrCreateUser(deps.dbs.system, body);
-    await createSession(c, userId);
+    await createSession(c, userId, { authMethod: "test" });
     return c.json({ ok: true });
   });

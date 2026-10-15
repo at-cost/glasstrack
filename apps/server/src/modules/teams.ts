@@ -20,6 +20,7 @@ import { notify, type Tx } from "../db/tenant";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
 import { uuid7 } from "../lib/ids";
 import { insertTeam } from "./workspaces";
+import { audit } from "./audit";
 
 /** null = every team (members, admins); otherwise the guest's team ids. */
 export async function visibleTeamIds(c: Ctx): Promise<string[] | null> {
@@ -66,6 +67,7 @@ export const teamRoutes = new Hono<AppEnv>()
     try {
       const id = await insertTeam(c.get("trx"), ws.id, body.name, body.key);
       await changed(c.get("trx"), ws.id, "team", id);
+      await audit(c, "team.created", "team", id, { name: body.name, key: body.key });
       return c.json({ id, key: body.key, name: body.name } satisfies Team, 201);
     } catch (e) {
       if (uniqueViolation(e)) throw conflict(`Team key ${body.key} is already used`);
@@ -104,6 +106,7 @@ export const teamRoutes = new Hono<AppEnv>()
     const n = await trx.selectFrom("teams").select((eb) => eb.fn.countAll<string>().as("n")).where("archivedAt", "is", null).executeTakeFirstOrThrow();
     if (Number(n.n) <= 1) throw badRequest("A workspace needs at least one team");
     await trx.updateTable("teams").set({ archivedAt: new Date() }).where("id", "=", c.req.param("teamId")).execute();
+    await audit(c, "team.archived", "team", c.req.param("teamId"));
     await changed(trx, c.get("ws").id, "team", c.req.param("teamId"));
     return c.json({ ok: true });
   })

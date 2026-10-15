@@ -45,16 +45,25 @@ export async function exportWorkspace(deps: Deps, { exportId, workspaceId }: Job
         cycles: await (trx.selectFrom("cycles").select(["id", "teamId", "number", "name", "startsOn", "endsOn", "completedAt"]).execute()),
         issues: await (trx.selectFrom("issues as i").innerJoin("teams as t", "t.id", "i.teamId")
           .select(["i.id", "i.teamId", sql<string>`t.key || '-' || i.number`.as("identifier"), "i.title", "i.descriptionMd",
-            "i.statusId", "i.priority", "i.assigneeId", "i.creatorId", "i.parentId", "i.cycleId", "i.dueDate", "i.estimate",
+            "i.statusId", "i.priority", "i.creatorId", "i.parentId", "i.cycleId", "i.dueDate", "i.estimate",
             "i.sortKey", "i.createdAt", "i.updatedAt", "i.startedAt", "i.completedAt", "i.canceledAt", "i.archivedAt"])
           .select((eb) => eb.selectFrom("issueLabels as il").select(sql<string[]>`coalesce(array_agg(il.label_id), '{}')`.as("l"))
             .whereRef("il.issueId", "=", "i.id").as("labelIds"))
+          .select((eb) => eb.selectFrom("issueAssignees as ia").select(sql<string[]>`coalesce(array_agg(ia.user_id), '{}')`.as("a"))
+            .whereRef("ia.issueId", "=", "i.id").as("assigneeIds"))
+          .select((eb) => eb.selectFrom("issueFieldValues as fv").select(sql<Record<string, unknown>>`coalesce(jsonb_object_agg(fv.field_id, fv.value), '{}'::jsonb)`.as("f"))
+            .whereRef("fv.issueId", "=", "i.id").as("fields"))
           .orderBy("i.createdAt").execute()),
         relations: await (trx.selectFrom("issueRelations").select(["id", "issueId", "relatedIssueId", "type", "createdAt"]).execute()),
         comments: await (trx.selectFrom("comments").select(["id", "issueId", "authorId", "bodyMd", "createdAt", "editedAt"])
           .where("deletedAt", "is", null).orderBy("createdAt").execute()),
         activity: await (trx.selectFrom("activity").select(["id", "issueId", "actorId", "kind", "data", "createdAt"]).orderBy("id").execute()),
         savedViews: await (trx.selectFrom("savedViews").select(["id", "name", "teamId", "ownerId", "shared", "layout", "filters"]).execute()),
+        customFields: await trx.selectFrom("customFields").select(["id", "teamId", "name", "type", "options", "position", "archivedAt"]).execute(),
+        timeEntries: await trx.selectFrom("timeEntries").select(["id", "issueId", "userId", "spentOn", "minutes", "note", "createdAt"]).execute(),
+        templates: await trx.selectFrom("issueTemplates").select(["id", "teamId", "name", "title", "descriptionMd", "statusId", "priority", "labelIds", "assigneeIds", "estimate", "fieldValues"]).execute(),
+        recurring: await trx.selectFrom("recurringIssues").select(["id", "templateId", "frequency", "interval", "weekdays", "monthDay", "hour", "timezone", "startsOn", "nextRunAt", "active"]).execute(),
+        auditLog: await trx.selectFrom("auditLog").select(["id", "actorLabel", "action", "targetType", "targetId", "data", "createdAt"]).orderBy("id").execute(),
         attachments: await (trx.selectFrom("attachments").select(["id", "issueId", "filename", "contentType", "sizeBytes", "storageKey", "createdAt"])
           .where("deletedAt", "is", null).where("uploadedAt", "is not", null).execute()),
       };
@@ -83,12 +92,19 @@ export async function exportWorkspace(deps: Deps, { exportId, workspaceId }: Job
         data.issues.map((i) => ({
           ...i,
           status: stateName.get(i.statusId),
-          assignee: i.assigneeId ? userName.get(i.assigneeId) : "",
+          assignees: (i.assigneeIds ?? []).map((a) => userName.get(a)),
           creator: i.creatorId ? userName.get(i.creatorId) : "",
           parent: i.parentId ? issueKey.get(i.parentId) : "",
           labels: (i.labelIds ?? []).map((l) => labelName.get(l)),
         })),
-        ["identifier", "title", "status", "priority", "assignee", "creator", "labels", "parent", "dueDate", "estimate", "createdAt", "updatedAt", "completedAt", "archivedAt", "descriptionMd"],
+        ["identifier", "title", "status", "priority", "assignees", "creator", "labels", "parent", "dueDate", "estimate", "createdAt", "updatedAt", "completedAt", "archivedAt", "descriptionMd"],
+      ),
+    );
+    await tar.addBuffer(
+      `${root}/time.csv`,
+      toCsv(
+        data.timeEntries.map((t) => ({ ...t, issue: issueKey.get(t.issueId), person: t.userId ? userName.get(t.userId) : "" })),
+        ["issue", "person", "spentOn", "minutes", "note", "createdAt"],
       ),
     );
     await tar.addBuffer(
@@ -228,6 +244,10 @@ export const handlers: Handlers = {
   "webhook.deliver": async (deps, { deliveryId }) => {
     const { deliverWebhook } = await import("../modules/webhooks");
     await deliverWebhook(deps, deliveryId);
+  },
+  "recurring.tick": async (deps) => {
+    const { runRecurring } = await import("../modules/templates");
+    await runRecurring(deps);
   },
   "backup.run": async (deps) => {
     const { runBackup } = await import("./backup");

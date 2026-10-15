@@ -77,6 +77,16 @@ beforeAll(async () => {
     headers: { "content-type": "application/json", "x-github-event": "pull_request", "x-hub-signature-256": `sha256=${createHmac("sha256", gh.secret).update(prBody).digest("hex")}` },
     body: prBody,
   });
+  // Batch A rows for B: assignee, custom field value, time, timer, template, schedule, SSO config (audit rows come from the actions above).
+  const bob = await b.c.ok("GET", "/api/v1/me");
+  await b.c.ok("PATCH", `/api/v1/w/bravo/issues/${bIssue.id}`, { assigneeIds: [bob.id] });
+  const fld = await b.c.ok("POST", "/api/v1/w/bravo/fields", { name: "Severity", type: "text" });
+  await b.c.ok("PATCH", `/api/v1/w/bravo/issues/${bIssue.id}`, { fields: { [fld.id]: "high" } });
+  await b.c.ok("POST", `/api/v1/w/bravo/issues/${bIssue.id}/time`, { minutes: 15, spentOn: "2026-10-01" });
+  await b.c.ok("POST", `/api/v1/w/bravo/issues/${bIssue.id}/timer/start`);
+  const tpl = await b.c.ok("POST", "/api/v1/w/bravo/templates", { teamId: b.team.id, name: "t", title: "t" });
+  await b.c.ok("POST", "/api/v1/w/bravo/recurring", { templateId: tpl.id, frequency: "weekly", startsOn: "2026-01-01" });
+  await sql`INSERT INTO sso_configs (workspace_id, issuer, client_id, client_secret_enc, allowed_domains) VALUES (${bWorkspaceId}, 'https://idp.example', 'c', 'v1.x.y.z', '{b.example}')`.execute(h.deps.dbs.owner);
 });
 
 afterAll(async () => {
@@ -137,7 +147,7 @@ describe("API isolation", () => {
     const bLabels = await b.c.ok("GET", "/api/v1/w/bravo/labels");
     expect((await a.c.patch(`${base}/issues/${id}`, { labelIds: [bLabels[0].id] })).status).toBe(400);
     const bob = await b.c.ok("GET", "/api/v1/me");
-    expect((await a.c.patch(`${base}/issues/${id}`, { assigneeId: bob.id })).status).toBe(400);
+    expect((await a.c.patch(`${base}/issues/${id}`, { assigneeIds: [bob.id] })).status).toBe(400);
   });
 
   it("listings and search in your workspace never include the other's rows", async () => {

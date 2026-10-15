@@ -3,6 +3,7 @@ import { z } from "zod";
 import { type AppEnv, requireRole, requireUser } from "../context";
 import { notFound } from "../lib/errors";
 import { newToken, sha256, uuid7 } from "../lib/ids";
+import { audit } from "./audit";
 
 export const tokenRoutes = new Hono<AppEnv>()
   .get("/tokens", async (c) => {
@@ -22,6 +23,7 @@ export const tokenRoutes = new Hono<AppEnv>()
     await c.get("trx").insertInto("apiTokens").values({
       id, workspaceId: c.get("ws").id, userId: user.id, name: body.name, tokenHash: sha256(token), tokenPrefix: token.slice(0, 10), expiresAt,
     }).execute();
+    await audit(c, "token.created", "token", id, { name: body.name, expiresAt: expiresAt?.toISOString() ?? null });
     // The full token is shown once and never stored.
     return c.json({ id, name: body.name, token, expiresAt: expiresAt?.toISOString() ?? null }, 201);
   })
@@ -32,5 +34,6 @@ export const tokenRoutes = new Hono<AppEnv>()
     if (!t) throw notFound("Token not found");
     if (t.userId !== user.id) requireRole(c, "admin");
     await trx.updateTable("apiTokens").set({ revokedAt: new Date() }).where("id", "=", c.req.param("id")).execute();
+    await audit(c, "token.revoked", "token", c.req.param("id"));
     return c.json({ ok: true });
   });
