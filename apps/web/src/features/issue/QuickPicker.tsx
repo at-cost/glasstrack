@@ -36,7 +36,7 @@ export function useIssueById(slug: string, id: string) {
 
 const TITLES: Record<PickerKind, string> = {
   status: "Change status",
-  assignee: "Assign",
+  assignee: "Assignees",
   priority: "Set priority",
   labels: "Edit labels",
 };
@@ -48,6 +48,7 @@ export function QuickPicker({ kind, issueRef, onClose }: { kind: PickerKind; iss
   const members = useMembers(slug);
   const labels = useLabels(slug);
   const update = useUpdateIssue(slug);
+  const qc = useQueryClient();
 
   const options =
     issue &&
@@ -69,10 +70,11 @@ export function QuickPicker({ kind, issueRef, onClose }: { kind: PickerKind; iss
           placeholder={`${TITLES[kind]}...`}
           options={options}
           selected={selectedFor(kind, issue)}
-          multi={kind === "labels"}
+          multi={kind === "labels" || kind === "assignee"}
           onPick={(id) => {
-            // Read the latest cached copy so repeated label toggles stack up.
-            update.mutate({ issue, patch: patchFor(kind, issue, id) });
+            // Read the latest cached copy so repeated toggles stack up.
+            const fresh = findCachedIssue(qc, slug, issue.id) ?? issue;
+            update.mutate({ issue: fresh, patch: patchFor(kind, fresh, id) });
           }}
           onClose={onClose}
           emptyText={kind === "labels" ? "No labels yet. Add them in Settings." : "No matches"}

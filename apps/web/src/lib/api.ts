@@ -1,26 +1,32 @@
 import type {
   Activity,
+  AuditEntry,
   Comment,
+  CustomField,
   Cycle,
   ExportJob,
   Invite,
   Issue,
   IssueDetail,
   IssueFilter,
+  IssueTemplate,
   Label,
   Me,
   Member,
   Notification,
   NotificationSettings,
+  RecurringIssue,
   Role,
   SavedView,
   SearchResult,
+  SsoConfig,
   StateCategory,
   Team,
+  TimeEntry,
   Workspace,
   WorkflowState,
 } from "@glasstrack/shared";
-import { setReadOnly } from "./store";
+import { setReadOnly, ssoRequiredStore } from "./store";
 
 export class ApiError extends Error {
   constructor(
@@ -57,6 +63,10 @@ export async function request<T>(method: string, path: string, body?: unknown): 
       // not JSON
     }
     if (res.status === 402 && code === "read_only") setReadOnly(true);
+    if (res.status === 403 && code === "sso_required") {
+      const m = /^\/w\/([^/?]+)/.exec(path);
+      if (m) ssoRequiredStore.set(decodeURIComponent(m[1]!));
+    }
     throw new ApiError(res.status, code, message);
   }
   if (res.status === 204) return undefined as T;
@@ -83,6 +93,7 @@ export function filterToQuery(f: IssueFilter & { order?: string; limit?: number 
   if (f.q) p.set("q", f.q);
   if (f.parent) p.set("parent", f.parent);
   if (f.includeArchived) p.set("includeArchived", "true");
+  for (const spec of f.field ?? []) p.append("field", spec);
   if (f.order) p.set("order", f.order);
   p.set("limit", String(f.limit ?? 500));
   return p.toString();
@@ -94,14 +105,45 @@ export type IssueCreate = {
   description?: string;
   statusId?: string;
   priority?: number;
-  assigneeId?: string | null;
+  assigneeIds?: string[];
+  /** Custom field values by field id; null clears a value. */
+  fields?: Record<string, unknown>;
+  templateId?: string;
   labelIds?: string[];
   dueDate?: string | null;
   estimate?: number | null;
   parentId?: string | null;
   cycleId?: string | null;
 };
-export type IssuePatch = Partial<Omit<IssueCreate, "teamId">>;
+export type IssuePatch = Partial<Omit<IssueCreate, "teamId" | "templateId">>;
+
+export type CustomFieldInput = { name: string; type: CustomField["type"]; teamId?: string | null; options: CustomField["options"] };
+export type TemplateInput = Omit<IssueTemplate, "id">;
+export type RecurringInput = Omit<RecurringIssue, "id" | "nextRunAt" | "lastRunAt" | "lastIssueId">;
+
+export interface RunningTimer {
+  issueId: string;
+  identifier: string;
+  title: string;
+  startedAt: string;
+}
+export interface TimeReport {
+  totalMinutes: number;
+  byUser: { userId: string | null; minutes: number }[];
+  byIssue: { issueId: string; identifier: string; title: string; minutes: number }[];
+  entries: (TimeEntry & { identifier: string; title: string })[];
+  truncated: boolean;
+}
+export type SsoSettings = SsoConfig | { enabled: false; callbackUrl: string };
+export interface SsoInput {
+  issuer: string;
+  clientId: string;
+  clientSecret?: string;
+  allowedDomains: string[];
+  autoJoinRole: "member" | "guest" | null;
+  enforce: boolean;
+  enabled: boolean;
+}
 
 export interface LedgerEntry {
   id: string;
@@ -258,6 +300,7 @@ export const api = {
   magicLink: (email: string, redirectTo?: string) => post<{ ok: true }>("/auth/magic-link", { email, redirectTo }),
   verifyMagicLink: (token: string) => post<{ redirectTo: string }>("/auth/magic-link/verify", { token }),
   logout: () => post<{ ok: true }>("/auth/logout"),
+  ssoDiscover: (email: string) => post<{ workspaces: { slug: string; name: string }[] }>("/auth/sso/discover", { email }),
 
   me: () => get<Me>("/me"),
   updateMe: (name: string) => patch<{ ok: true }>("/me", { name }),
@@ -374,6 +417,47 @@ export const api = {
       github: () => get<GithubIntegration>(`${w}/integrations/github`),
       saveGithub: (b: { moveOnMerge: boolean; rotateSecret?: boolean }) => put<GithubIntegration>(`${w}/integrations/github`, b),
       disableGithub: () => del<{ ok: true }>(`${w}/integrations/github`),
+
+      fields: () => get<CustomField[]>(`${w}/fields`),
+      createField: (b: CustomFieldInput) => post<CustomField>(`${w}/fields`, b),
+      updateField: (id: string, b: Partial<Pick<CustomField, "name" | "options" | "position">>) => patch<CustomField>(`${w}/fields/${id}`, b),
+      deleteField: (id: string) => del<{ ok: true }>(`${w}/fields/${id}`),
+
+      timeEntries: (ref: string) => get<TimeEntry[]>(`${w}/issues/${enc(ref)}/time`),
+      logTime: (ref: string, b: { minutes: number; spentOn: string; note?: string }) => post<TimeEntry>(`${w}/issues/${enc(ref)}/time`, b),
+      updateTime: (id: string, b: Partial<{ minutes: number; spentOn: string; note: string }>) => patch<TimeEntry>(`${w}/time/${id}`, b),
+      deleteTime: (id: string) => del<{ ok: true }>(`${w}/time/${id}`),
+      timer: () => get<RunningTimer | null>(`${w}/timer`),
+      startTimer: (ref: string) => post<{ started: true; stopped: TimeEntry | null }>(`${w}/issues/${enc(ref)}/timer/start`),
+      stopTimer: () => post<TimeEntry>(`${w}/timer/stop`),
+      timeReport: (q: { from: string; to: string; team?: string; user?: string }) => {
+        const p = new URLSearchParams({ from: q.from, to: q.to });
+        if (q.team) p.set("team", q.team);
+        if (q.user) p.set("user", q.user);
+        return get<TimeReport>(`${w}/time?${p}`);
+      },
+
+      templates: () => get<IssueTemplate[]>(`${w}/templates`),
+      createTemplate: (b: TemplateInput) => post<IssueTemplate>(`${w}/templates`, b),
+      updateTemplate: (id: string, b: Partial<Omit<TemplateInput, "teamId">>) => patch<IssueTemplate>(`${w}/templates/${id}`, b),
+      deleteTemplate: (id: string) => del<{ ok: true }>(`${w}/templates/${id}`),
+      recurring: () => get<RecurringIssue[]>(`${w}/recurring`),
+      createRecurring: (b: RecurringInput) => post<RecurringIssue>(`${w}/recurring`, b),
+      updateRecurring: (id: string, b: Partial<Omit<RecurringInput, "templateId">>) => patch<RecurringIssue>(`${w}/recurring/${id}`, b),
+      deleteRecurring: (id: string) => del<{ ok: true }>(`${w}/recurring/${id}`),
+
+      audit: (q: { before?: string; action?: string }) => {
+        const p = new URLSearchParams();
+        if (q.before) p.set("before", q.before);
+        if (q.action) p.set("action", q.action);
+        const qs = p.toString();
+        return get<{ entries: AuditEntry[]; next: string | null }>(`${w}/audit${qs ? `?${qs}` : ""}`);
+      },
+      auditCsvUrl: () => `${BASE}${w}/audit.csv`,
+
+      sso: () => get<SsoSettings>(`${w}/sso`),
+      saveSso: (b: SsoInput) => put<SsoSettings>(`${w}/sso`, b),
+      removeSso: () => del<{ ok: true }>(`${w}/sso`),
     };
   },
 };

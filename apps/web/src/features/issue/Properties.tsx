@@ -3,20 +3,23 @@ import { Link } from "@tanstack/react-router";
 import { type IssueDetail, PRIORITY_LABELS } from "@glasstrack/shared";
 import { Calendar, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Avatar, LabelDot, PriorityIcon, StatusIcon } from "../../components/icons";
+import { AvatarStack, LabelDot, PriorityIcon, StatusIcon } from "../../components/icons";
 import { OptionList, Popover, PickerButton } from "../../components/Picker";
 import { api } from "../../lib/api";
 import { useUpdateIssue } from "../../lib/mutations";
 import { paths } from "../../lib/paths";
-import { useCycles, useLabels, useMembers, useStates } from "../../lib/queries";
+import { useCycles, useFields, useLabels, useMembers, useStates } from "../../lib/queries";
 import { useWs } from "../shell/context";
+import { FieldEditor, fieldsForTeam } from "./fields";
 import { assigneeOptions, cycleLabel, cycleOptions, labelOptions, patchFor, priorityOptions, statusOptions } from "./options";
 import { useIssueById } from "./QuickPicker";
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="prop-row">
-      <span className="prop-label">{label}</span>
+      <span className="prop-label" title={label}>
+        {label}
+      </span>
       <div className="prop-value">{children}</div>
     </div>
   );
@@ -140,12 +143,14 @@ export function Properties({ issue }: { issue: IssueDetail }) {
   const members = useMembers(slug);
   const labels = useLabels(slug);
   const cycles = useCycles(slug);
+  const fields = useFields(slug);
   const update = useUpdateIssue(slug);
   const [estimate, setEstimate] = useState(issue.estimate === null ? "" : String(issue.estimate));
   useEffect(() => setEstimate(issue.estimate === null ? "" : String(issue.estimate)), [issue.estimate]);
 
   const state = states.data?.find((s) => s.id === issue.statusId);
-  const assignee = members.data?.find((m) => m.userId === issue.assigneeId);
+  const assignees = issue.assigneeIds.map((id) => members.data?.find((m) => m.userId === id)).filter((m) => m !== undefined);
+  const teamFields = fieldsForTeam(fields.data, issue.teamId);
   const issueLabels = (labels.data ?? []).filter((l) => issue.labelIds.includes(l.id));
   const cycle = cycles.data?.find((c) => c.id === issue.cycleId);
   const pick = (kind: "status" | "priority" | "assignee" | "labels" | "cycle") => (id: string) =>
@@ -189,16 +194,24 @@ export function Properties({ issue }: { issue: IssueDetail }) {
           {PRIORITY_LABELS[issue.priority]}
         </PickerButton>
       </Row>
-      <Row label="Assignee">
+      <Row label="Assignees">
         <PickerButton
-          label="Assignee"
+          label="Assignees"
+          multi
           options={assigneeOptions(members.data, me.id)}
-          selected={[issue.assigneeId ?? "none"]}
+          selected={issue.assigneeIds.length ? issue.assigneeIds : ["none"]}
           onPick={pick("assignee")}
           disabled={disabled}
+          testId="assignee-picker"
         >
-          <Avatar member={assignee ?? null} size={18} />
-          {assignee?.name ?? "Unassigned"}
+          <AvatarStack ids={issue.assigneeIds} members={members.data} size={18} />
+          <span className="prop-text">
+            {issue.assigneeIds.length === 0
+              ? "Unassigned"
+              : assignees.length === issue.assigneeIds.length
+                ? assignees.map((m) => m.name).join(", ")
+                : `${issue.assigneeIds.length} people`}
+          </span>
         </PickerButton>
       </Row>
       <Row label="Labels">
@@ -270,6 +283,22 @@ export function Properties({ issue }: { issue: IssueDetail }) {
       <Row label="Parent">
         <ParentPicker issue={issue} disabled={disabled} />
       </Row>
+      {teamFields.length > 0 && (
+        <div className="props-fields">
+          {teamFields.map((f) => (
+            <Row key={f.id} label={f.name}>
+              <FieldEditor
+                field={f}
+                value={issue.fields?.[f.id]}
+                members={members.data}
+                meId={me.id}
+                disabled={disabled}
+                onChange={(v) => update.mutate({ issue, patch: { fields: { [f.id]: v } } })}
+              />
+            </Row>
+          ))}
+        </div>
+      )}
     </aside>
   );
 }

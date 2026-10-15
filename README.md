@@ -28,6 +28,7 @@ An open-source ticket tracker for software teams: issues, boards, cycles, keyboa
 - Import from Linear, Jira and Trello
 - GitHub: link pull requests by issue key, move issues to Done on merge
 - Hosted mode: prepaid credit, daily pro-rata charges, Stripe top-ups, and a public finances page with every cost line
+- **Free on every server, including self-hosted:** single sign-on (OIDC: Okta, Entra ID, Google Workspace, Keycloak, Authentik), time tracking, custom fields, recurring issues, templates, an audit log and multiple assignees. Other trackers charge extra for these.
 
 | | |
 |---|---|

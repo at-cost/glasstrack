@@ -61,10 +61,16 @@ export function cycleOptions(cycles: Cycle[] | undefined, teamId: string): Optio
   ];
 }
 
-/** Turns a picker choice into an issue patch. Labels toggle. */
+/** Adds or removes `id`; "none" clears the list. */
+export function toggleAssignee(ids: string[], id: string): string[] {
+  if (id === "none") return [];
+  return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+}
+
+/** Turns a picker choice into an issue patch. Labels and assignees toggle. */
 export function patchFor(
   kind: "status" | "priority" | "assignee" | "labels" | "cycle",
-  issue: Pick<Issue, "labelIds">,
+  issue: Pick<Issue, "labelIds" | "assigneeIds">,
   id: string,
 ): IssuePatch {
   switch (kind) {
@@ -73,7 +79,7 @@ export function patchFor(
     case "priority":
       return { priority: Number(id) };
     case "assignee":
-      return { assigneeId: id === "none" ? null : id };
+      return { assigneeIds: toggleAssignee(issue.assigneeIds, id) };
     case "cycle":
       return { cycleId: id === "none" ? null : id };
     case "labels":
@@ -88,7 +94,7 @@ export function selectedFor(kind: "status" | "priority" | "assignee" | "labels" 
     case "priority":
       return [String(issue.priority)];
     case "assignee":
-      return [issue.assigneeId ?? "none"];
+      return issue.assigneeIds.length ? issue.assigneeIds : ["none"];
     case "cycle":
       return [issue.cycleId ?? "none"];
     case "labels":

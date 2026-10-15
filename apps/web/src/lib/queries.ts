@@ -30,6 +30,14 @@ export const keys = {
   webhooks: (slug: string) => ["webhooks", slug] as const,
   deliveries: (slug: string, id: string) => ["deliveries", slug, id] as const,
   github: (slug: string) => ["github", slug] as const,
+  fields: (slug: string) => ["fields", slug] as const,
+  templates: (slug: string) => ["templates", slug] as const,
+  recurring: (slug: string) => ["recurring", slug] as const,
+  timer: (slug: string) => ["timer", slug] as const,
+  timeEntries: (slug: string, issueId: string) => ["time-entries", slug, issueId] as const,
+  timeReportAll: (slug: string) => ["time-report", slug] as const,
+  audit: (slug: string, action: string) => ["audit", slug, action] as const,
+  sso: (slug: string) => ["sso", slug] as const,
   operator: ["operator"] as const,
   adminOverview: ["admin-overview"] as const,
   publicFinances: ["public-finances"] as const,
@@ -57,6 +65,18 @@ export const useLabels = (slug: string) =>
 export const useCycles = (slug: string) =>
   useQuery({ queryKey: keys.cycles(slug), queryFn: () => api.ws(slug).cycles(), staleTime: 60_000 });
 export const useViews = (slug: string) => useQuery({ queryKey: keys.views(slug), queryFn: () => api.ws(slug).views(), staleTime: 60_000 });
+
+export const useFields = (slug: string) =>
+  useQuery({ queryKey: keys.fields(slug), queryFn: () => api.ws(slug).fields(), staleTime: 60_000 });
+export const useTemplates = (slug: string, enabled = true) =>
+  useQuery({ queryKey: keys.templates(slug), queryFn: () => api.ws(slug).templates(), staleTime: 60_000, enabled });
+export const useRecurring = (slug: string) =>
+  useQuery({ queryKey: keys.recurring(slug), queryFn: () => api.ws(slug).recurring(), staleTime: 30_000 });
+/** The signed-in user's running timer in this workspace, if any. */
+export const useTimer = (slug: string) =>
+  useQuery({ queryKey: keys.timer(slug), queryFn: () => api.ws(slug).timer(), staleTime: 30_000, refetchInterval: 120_000 });
+export const useTimeEntries = (slug: string, issueId: string | undefined) =>
+  useQuery({ queryKey: keys.timeEntries(slug, issueId ?? ""), queryFn: () => api.ws(slug).timeEntries(issueId!), enabled: Boolean(issueId) });
 
 export const useIssues = (slug: string, f: ListFilter, enabled = true) =>
   useQuery({ queryKey: keys.issues(slug, f), queryFn: () => api.ws(slug).issues(f), enabled });
@@ -109,7 +129,9 @@ export function invalidateFor(qc: QueryClient, slug: string, events: { t: string
             },
           });
           qc.invalidateQueries({ queryKey: keys.activity(slug, e.id) });
+          qc.invalidateQueries({ queryKey: keys.timeEntries(slug, e.id) });
         });
+        once("timer", () => qc.invalidateQueries({ queryKey: keys.timer(slug) }));
         once("notifications", () => qc.invalidateQueries({ queryKey: keys.notifications(slug) }));
         break;
       case "comment":
@@ -125,6 +147,8 @@ export function invalidateFor(qc: QueryClient, slug: string, events: { t: string
         break;
       case "team":
         once("teams", () => qc.invalidateQueries({ queryKey: keys.teams(slug) }));
+        // Custom field changes are announced as team events.
+        once("fields", () => qc.invalidateQueries({ queryKey: keys.fields(slug) }));
         break;
       case "state":
         once("states", () => qc.invalidateQueries({ queryKey: keys.states(slug) }));

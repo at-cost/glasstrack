@@ -24,14 +24,33 @@ export function matchesFilter(i: Issue, f: ListFilter, meId: string | undefined)
   if (f.priority?.length && !f.priority.includes(i.priority)) return false;
   if (f.parent && i.parentId !== f.parent) return false;
   if (f.assignee?.length) {
-    const ok = f.assignee.some((a) => (a === "none" ? i.assigneeId === null : a === "me" ? i.assigneeId === meId : i.assigneeId === a));
+    const ok = f.assignee.some((a) =>
+      a === "none" ? i.assigneeIds.length === 0 : i.assigneeIds.includes(a === "me" ? (meId ?? "") : a),
+    );
     if (!ok) return false;
   }
   if (f.label?.length && !f.label.some((l) => i.labelIds.includes(l))) return false;
+  for (const spec of f.field ?? []) {
+    const at = spec.indexOf(":");
+    const v = i.fields[spec.slice(0, at)];
+    const want = spec.slice(at + 1);
+    const empty = v === undefined || v === null || (Array.isArray(v) && v.length === 0);
+    if (want === "none" ? !empty : empty || !(Array.isArray(v) ? v.map(String).includes(want) : String(v) === want)) return false;
+  }
   if (f.cycle === "none" && i.cycleId) return false;
   if (f.cycle && f.cycle !== "none" && f.cycle !== "active" && i.cycleId !== f.cycle) return false;
   if (f.q) return false;
   return true;
+}
+
+/** Applies a fields patch: null or empty clears a value. */
+export function mergeFieldValues(cur: Record<string, unknown>, patch: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...cur };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) delete out[k];
+    else out[k] = v;
+  }
+  return out;
 }
 
 async function cancelIssueQueries(qc: QueryClient, slug: string) {
@@ -52,7 +71,7 @@ function patchEverywhere(qc: QueryClient, slug: string, id: string, fn: (i: Issu
         children: d.children.map((c) => {
           if (c.id !== id) return c;
           const n = fn({ ...(c as unknown as Issue) });
-          return { ...c, statusId: n.statusId, title: n.title, assigneeId: n.assigneeId };
+          return { ...c, statusId: n.statusId, title: n.title, assigneeIds: n.assigneeIds };
         }),
       };
     }
@@ -77,6 +96,7 @@ export function useUpdateIssue(slug: string) {
         ...i,
         ...(patch as Partial<Issue>),
         priority: (patch.priority ?? i.priority) as Priority,
+        fields: patch.fields ? mergeFieldValues(i.fields ?? {}, patch.fields) : i.fields,
         updatedAt: new Date().toISOString(),
       }));
       return { snap };
@@ -138,7 +158,8 @@ export function useCreateIssue(slug: string, meId: string | undefined) {
         description: b.description ?? "",
         statusId: b.statusId,
         priority: (b.priority ?? 0) as Priority,
-        assigneeId: b.assigneeId ?? null,
+        assigneeIds: b.assigneeIds ?? [],
+        fields: mergeFieldValues({}, b.fields ?? {}),
         creatorId: meId ?? "",
         parentId: b.parentId ?? null,
         cycleId: b.cycleId ?? null,

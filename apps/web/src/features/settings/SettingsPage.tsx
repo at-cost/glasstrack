@@ -33,17 +33,26 @@ import { GitHub } from "./GitHub";
 import { Import } from "./Import";
 import { Tokens } from "./Tokens";
 import { Webhooks } from "./Webhooks";
+import { AuditLog } from "./AuditLog";
+import { Fields } from "./Fields";
+import { InlineText } from "./InlineText";
+import { Sso } from "./Sso";
+import { Templates } from "./Templates";
 
 const ALL_TABS = [
   { id: "general", label: "General" },
   { id: "members", label: "Members" },
   { id: "teams", label: "Teams" },
+  { id: "fields", label: "Fields" },
+  { id: "templates", label: "Templates" },
   { id: "notifications", label: "Notifications" },
   { id: "profile", label: "Profile" },
   { id: "billing", label: "Billing" },
   { id: "tokens", label: "API tokens" },
   { id: "webhooks", label: "Webhooks" },
   { id: "github", label: "GitHub" },
+  { id: "sso", label: "Single sign-on" },
+  { id: "audit", label: "Audit log" },
   { id: "import", label: "Import" },
   { id: "data", label: "Data" },
 ] as const;
@@ -57,8 +66,8 @@ export function SettingsPage() {
   const billing = useBilling(slug);
   const tabs = ALL_TABS.filter((t) => {
     if (t.id === "billing") return billing.data?.enabled === true;
-    if (t.id === "webhooks" || t.id === "github") return isAdmin;
-    if (t.id === "import" || t.id === "tokens") return workspace.role !== "guest";
+    if (t.id === "webhooks" || t.id === "github" || t.id === "fields" || t.id === "sso" || t.id === "audit") return isAdmin;
+    if (t.id === "import" || t.id === "tokens" || t.id === "templates") return workspace.role !== "guest";
     return true;
   });
   const wanted = params.tab ?? search.tab;
@@ -127,6 +136,10 @@ export function SettingsPage() {
               {tab === "tokens" && <Tokens />}
               {tab === "webhooks" && <Webhooks />}
               {tab === "github" && <GitHub />}
+              {tab === "fields" && <Fields />}
+              {tab === "templates" && <Templates />}
+              {tab === "sso" && <Sso />}
+              {tab === "audit" && <AuditLog />}
               {tab === "import" && <Import />}
               {tab === "data" && <Data />}
             </>
@@ -831,33 +844,6 @@ function DeleteStatusDialog({ state, others, onClose }: { state: WorkflowState; 
         </select>
       </div>
     </Dialog>
-  );
-}
-
-function InlineText({ value, label, disabled, onSave }: { value: string; label: string; disabled?: boolean; onSave: (v: string) => void }) {
-  const [v, setV] = useState(value);
-  useEffect(() => setV(value), [value]);
-  return (
-    <input
-      className="input input-sm grow"
-      aria-label={label}
-      value={v}
-      disabled={disabled}
-      maxLength={40}
-      onChange={(e) => setV(e.target.value)}
-      onBlur={() => {
-        const t = v.trim();
-        if (!t) setV(value);
-        else if (t !== value) onSave(t);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        if (e.key === "Escape") {
-          setV(value);
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
-    />
   );
 }
 

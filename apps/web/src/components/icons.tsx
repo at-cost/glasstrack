@@ -135,3 +135,38 @@ export function LabelDot({ color }: { color: string }) {
 export function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="kbd">{children}</kbd>;
 }
+
+/** Up to `max` overlapping avatars, then "+N". Empty shows the unassigned ring. */
+export function AvatarStack({
+  ids,
+  members,
+  size = 18,
+  max = 3,
+}: {
+  ids: string[];
+  members: Map<string, Member> | Member[] | undefined;
+  size?: number;
+  max?: number;
+}) {
+  const find = (id: string) => (members instanceof Map ? members.get(id) : members?.find((m) => m.userId === id));
+  if (ids.length === 0) return <Avatar member={null} size={size} />;
+  const people = ids.map((id) => find(id) ?? { name: "Former member", avatarUrl: null });
+  const shown = people.slice(0, max);
+  const extra = people.length - shown.length;
+  const label = `Assigned to ${people.map((p) => p.name).join(", ")}`;
+  return (
+    <span className="avatar-stack" role="img" aria-label={label} title={label}>
+      {shown.map((p, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: ids can repeat only for former members, order is stable
+        <span key={`${ids[i]}-${i}`} className="avatar-stack-item" aria-hidden="true">
+          <Avatar member={p} size={size} title="" />
+        </span>
+      ))}
+      {extra > 0 && (
+        <span className="avatar-more" aria-hidden="true" style={{ height: size, minWidth: size, fontSize: Math.max(9, size * 0.5) }}>
+          +{extra}
+        </span>
+      )}
+    </span>
+  );
+}

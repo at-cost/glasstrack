@@ -5,7 +5,7 @@ import { Archive, Bell, BellOff, ChevronRight, Copy, Ellipsis, ExternalLink, Fil
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "../../components/Dialog";
 import { Empty, Skeleton, Spinner } from "../../components/Feedback";
-import { Avatar, StatusIcon } from "../../components/icons";
+import { AvatarStack, StatusIcon } from "../../components/icons";
 import { Markdown, MarkdownEditor } from "../../components/MarkdownEditor";
 import { Popover } from "../../components/Picker";
 import { ApiError, api, errorMessage, uploadAttachment } from "../../lib/api";
@@ -18,6 +18,7 @@ import { toast, toastError } from "../../lib/toast";
 import { MenuList } from "../shell/AppShell";
 import { useWs } from "../shell/context";
 import { IssueSearchPopover, Properties } from "./Properties";
+import { TimeSection } from "./TimeSection";
 import { Timeline } from "./Timeline";
 
 export function IssueDetailPage() {
@@ -63,6 +64,7 @@ function IssueView({ issue }: { issue: IssueDetail }) {
           <Relations issue={issue} />
           <PullRequests issue={issue} />
           <Attachments issue={issue} />
+          <TimeSection issue={issue} />
           <Timeline issue={issue} />
         </div>
         <Properties issue={issue} />
@@ -295,7 +297,7 @@ function SubIssues({ issue }: { issue: IssueDetail }) {
                 <StatusIcon state={states.data?.find((s) => s.id === c.statusId)} />
                 <span className="issue-id">{c.identifier}</span>
                 <span className="issue-title">{c.title}</span>
-                <Avatar member={members.data?.find((m) => m.userId === c.assigneeId) ?? null} size={18} />
+                <AvatarStack ids={c.assigneeIds ?? []} members={members.data} size={18} />
               </Link>
             </li>
           ))}

@@ -65,3 +65,13 @@ describe("text helpers", () => {
     expect(parseIssueKey("12")).toBeNull();
   });
 });
+
+import { updateIssueTemplateSchema, updateRecurringIssueSchema, updateSavedViewSchema } from "./schemas";
+
+describe("partial update schemas never invent values", () => {
+  it("only contain the keys that were sent", () => {
+    expect(updateRecurringIssueSchema.parse({ active: false })).toEqual({ active: false });
+    expect(updateIssueTemplateSchema.parse({ name: "x" })).toEqual({ name: "x" });
+    expect(updateSavedViewSchema.parse({ name: "x" })).toEqual({ name: "x" });
+  });
+});

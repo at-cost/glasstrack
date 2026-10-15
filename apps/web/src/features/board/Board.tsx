@@ -19,7 +19,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { type Issue, keyBetween, type Label, type Member, type WorkflowState } from "@glasstrack/shared";
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Avatar, LabelDot, PriorityIcon, StatusIcon } from "../../components/icons";
+import { AvatarStack, LabelDot, PriorityIcon, StatusIcon } from "../../components/icons";
 import { dueState, formatDueDate } from "../../lib/format";
 import { useMoveIssue } from "../../lib/mutations";
 import { paths } from "../../lib/paths";
@@ -204,7 +204,7 @@ export function Board({ issues, teamId, statusIds }: { issues: Issue[]; teamId: 
                   issue={i}
                   disabled={!canEdit || id.startsWith("temp-")}
                   labels={i.labelIds.map((l) => labelById.get(l)).filter((l): l is Label => Boolean(l))}
-                  assignee={i.assigneeId ? memberById.get(i.assigneeId) : undefined}
+                  members={memberById}
                   justDragged={justDragged}
                   slug={slug}
                 />
@@ -218,7 +218,7 @@ export function Board({ issues, teamId, statusIds }: { issues: Issue[]; teamId: 
           <CardBody
             issue={active}
             labels={active.labelIds.map((l) => labelById.get(l)).filter((l): l is Label => Boolean(l))}
-            assignee={active.assigneeId ? memberById.get(active.assigneeId) : undefined}
+            members={memberById}
             overlay
           />
         ) : null}
@@ -272,13 +272,13 @@ function Column({
   );
 }
 
-function CardBody({ issue, labels, assignee, overlay }: { issue: Issue; labels: Label[]; assignee?: Member; overlay?: boolean }) {
+function CardBody({ issue, labels, members, overlay }: { issue: Issue; labels: Label[]; members: Map<string, Member>; overlay?: boolean }) {
   const due = dueState(issue.dueDate);
   return (
     <div className={`card-inner${overlay ? " overlay" : ""}`}>
       <div className="card-top">
         <span className="issue-id">{issue.id.startsWith("temp-") ? "New" : issue.identifier}</span>
-        <Avatar member={assignee ?? null} size={18} title={assignee ? `Assigned to ${assignee.name}` : "Unassigned"} />
+        <AvatarStack ids={issue.assigneeIds} members={members} size={18} />
       </div>
       <div className="card-title">{issue.title}</div>
       {(issue.priority > 0 || issue.dueDate || labels.length > 0) && (
@@ -300,14 +300,14 @@ function CardBody({ issue, labels, assignee, overlay }: { issue: Issue; labels: 
 function SortableCard({
   issue,
   labels,
-  assignee,
+  members,
   disabled,
   justDragged,
   slug,
 }: {
   issue: Issue;
   labels: Label[];
-  assignee?: Member;
+  members: Map<string, Member>;
   disabled: boolean;
   justDragged: React.RefObject<boolean>;
   slug: string;
@@ -349,7 +349,7 @@ function SortableCard({
         if (currentIssueStore.get() === issue.id) currentIssueStore.set(null);
       }}
     >
-      <CardBody issue={issue} labels={labels} assignee={assignee} />
+      <CardBody issue={issue} labels={labels} members={members} />
     </div>
   );
 }

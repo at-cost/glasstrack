@@ -8,9 +8,10 @@ import { type Option, PickerButton } from "../../components/Picker";
 import { api, errorMessage } from "../../lib/api";
 import { type FilterSearch, isEmptyFilter, readFilterSearch } from "../../lib/filters";
 import { paths } from "../../lib/paths";
-import { keys, useCycles, useLabels, useMembers, useStates } from "../../lib/queries";
+import { keys, useCycles, useFields, useLabels, useMembers, useStates } from "../../lib/queries";
 import { toast, toastError } from "../../lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { fieldsForTeam } from "../issue/fields";
 import { cycleLabel, priorityOptions } from "../issue/options";
 import { useWs } from "../shell/context";
 
@@ -62,6 +63,7 @@ export function FilterBar({
   const members = useMembers(slug);
   const labels = useLabels(slug);
   const cycles = useCycles(slug);
+  const fields = useFields(slug);
   const [fs, setFs] = useFilterSearch();
   const [q, setQ] = useState(fs.q ?? "");
   const [saving, setSaving] = useState(false);
@@ -121,6 +123,46 @@ export function FilterBar({
     { id: "none", label: "No cycle" },
     ...(cycles.data ?? []).filter((c) => !teamId || c.teamId === teamId).map((c) => ({ id: c.id, label: cycleLabel(c) })),
   ];
+
+  // Custom fields: one value per field, "fieldId:value" (value "none" = empty).
+  const filterable = (teamId ? fieldsForTeam(fields.data, teamId) : (fields.data ?? [])).filter((f) =>
+    ["select", "multi_select", "checkbox", "user"].includes(f.type),
+  );
+  const fieldOpts: Option[] = filterable.flatMap((f): Option[] => {
+    const values: Option[] =
+      f.type === "checkbox"
+        ? [
+            { id: `${f.id}:true`, label: "Checked" },
+            { id: `${f.id}:none`, label: "Not checked" },
+          ]
+        : f.type === "user"
+          ? [
+              ...(members.data ?? []).map((m) => ({
+                id: `${f.id}:${m.userId}`,
+                label: m.userId === me.id ? `${m.name} (you)` : m.name,
+                icon: <Avatar member={m} size={16} />,
+                keywords: m.email,
+              })),
+              { id: `${f.id}:none`, label: "No one", icon: <Avatar member={null} size={16} /> },
+            ]
+          : [
+              ...f.options.map((o) => ({ id: `${f.id}:${o.id}`, label: o.name, icon: <LabelDot color={o.color ?? "var(--text-3)"} /> })),
+              { id: `${f.id}:none`, label: "Empty" },
+            ];
+    return values.map((v) => ({ ...v, group: f.name, keywords: `${f.name} ${v.keywords ?? ""}` }));
+  });
+  const fieldSel = fs.field?.split(",").filter(Boolean) ?? [];
+  const pickField = (spec: string) => {
+    const fid = spec.slice(0, spec.indexOf(":"));
+    const others = fieldSel.filter((x) => !x.startsWith(`${fid}:`));
+    const next = fieldSel.includes(spec) ? others : [...others, spec];
+    setFs({ field: next.length ? next.join(",") : undefined });
+  };
+  const fieldChip = (() => {
+    if (fieldSel.length !== 1) return fieldSel.length ? `Fields: ${fieldSel.length}` : "Field";
+    const opt = fieldOpts.find((o) => o.id === fieldSel[0]);
+    return opt ? `${opt.group}: ${opt.label}` : "Fields: 1";
+  })();
 
   const count = (csv?: string) => (csv ? csv.split(",").length : 0);
   const chipLabel = (name: string, n: number, single?: string) =>
@@ -223,6 +265,21 @@ export function FilterBar({
           <ChevronDown size={12} aria-hidden="true" />
         </PickerButton>
       )}
+      {fieldOpts.length > 0 && (
+        <PickerButton
+          label="Custom field"
+          className={`filter-chip${fieldSel.length ? " on" : ""}`}
+          multi
+          options={fieldOpts}
+          selected={fieldSel}
+          onPick={pickField}
+          placeholder="Filter by a field..."
+          testId="field-filter"
+        >
+          {fieldChip}
+          <ChevronDown size={12} aria-hidden="true" />
+        </PickerButton>
+      )}
       {!isEmptyFilter(fs) && (
         <button
           type="button"
@@ -230,7 +287,7 @@ export function FilterBar({
           onClick={() => {
             setQ("");
             lastPushed.current = "";
-            setFs({ status: undefined, assignee: undefined, label: undefined, priority: undefined, cycle: undefined, q: undefined });
+            setFs({ status: undefined, assignee: undefined, label: undefined, priority: undefined, cycle: undefined, q: undefined, field: undefined });
           }}
         >
           <X size={13} aria-hidden="true" />

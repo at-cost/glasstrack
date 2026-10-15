@@ -1,12 +1,27 @@
 import type { Member } from "@glasstrack/shared";
 import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { renderMarkdown } from "../lib/markdown";
+import { renderMermaidIn } from "../lib/mermaid";
+import { effectiveTheme, useTheme } from "../lib/theme";
 import { Avatar } from "./icons";
 
 export function Markdown({ source, className = "" }: { source: string; className?: string }) {
   const html = useMemo(() => renderMarkdown(source), [source]);
+  const ref = useRef<HTMLDivElement>(null);
+  const mode = effectiveTheme(useTheme());
+  // ```mermaid blocks become diagrams; mermaid is only downloaded when one is on screen.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: html is the trigger (the DOM it produced), not an input
+  useEffect(() => {
+    const root = ref.current;
+    if (!root?.querySelector("code.language-mermaid, .mermaid-block")) return;
+    let cancelled = false;
+    void renderMermaidIn(root, mode, () => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [html, mode]);
   // biome-ignore lint/security/noDangerouslySetInnerHtml: renderMarkdown sanitizes with DOMPurify
-  return <div className={`markdown ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div ref={ref} className={`markdown ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 interface MentionState {

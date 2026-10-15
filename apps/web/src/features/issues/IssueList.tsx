@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { type Issue, type Label, type Member, STATE_CATEGORIES, type WorkflowState } from "@glasstrack/shared";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Avatar, LabelDot, PriorityIcon, StatusIcon } from "../../components/icons";
+import { AvatarStack, LabelDot, PriorityIcon, StatusIcon } from "../../components/icons";
 import { dueState, formatDueDate } from "../../lib/format";
 import { paths } from "../../lib/paths";
 import { useLabels, useMembers, useStates } from "../../lib/queries";
@@ -70,13 +70,13 @@ export function IssueRow({
   issue,
   state,
   labels,
-  assignee,
+  members,
   showStatus = true,
 }: {
   issue: Issue;
   state?: WorkflowState;
   labels: Label[];
-  assignee?: Member;
+  members: Map<string, Member> | Member[] | undefined;
   showStatus?: boolean;
 }) {
   const { slug } = useWs();
@@ -100,7 +100,7 @@ export function IssueRow({
             {formatDueDate(issue.dueDate)}
           </span>
         )}
-        <Avatar member={assignee ?? null} size={20} title={assignee ? `Assigned to ${assignee.name}` : "Unassigned"} />
+        <AvatarStack ids={issue.assigneeIds} members={members} size={20} />
       </span>
     </>
   );
@@ -195,7 +195,7 @@ export function IssueList({
                       state={stateById.get(i.statusId)}
                       showStatus={false}
                       labels={i.labelIds.map((id) => labelById.get(id)).filter((l): l is Label => Boolean(l))}
-                      assignee={i.assigneeId ? memberById.get(i.assigneeId) : undefined}
+                      members={memberById}
                     />
                   </li>
                 ))}

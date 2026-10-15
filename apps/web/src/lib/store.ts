@@ -33,13 +33,17 @@ export const readOnlyStore = createStore(false);
 export const setReadOnly = (v: boolean) => readOnlyStore.set(v);
 export const useReadOnly = () => useStore(readOnlyStore);
 
+/** Slug of a workspace that answered 403 sso_required (members must sign in through its SSO). */
+export const ssoRequiredStore = createStore<string | null>(null);
+export const useSsoRequired = () => useStore(ssoRequiredStore);
+
 export type PickerKind = "status" | "priority" | "assignee" | "labels";
 
 export interface CreateDefaults {
   teamId?: string;
   statusId?: string;
   parentId?: string;
-  assigneeId?: string | null;
+  assigneeIds?: string[];
 }
 
 export interface UiState {

@@ -7,9 +7,11 @@ import { Avatar } from "../../components/icons";
 import { Markdown, MentionTextarea } from "../../components/MarkdownEditor";
 import { api, errorMessage } from "../../lib/api";
 import { formatDueDate, fullTime, relativeTime } from "../../lib/format";
-import { keys, useActivity, useComments, useCycles, useLabels, useMembers, useStates } from "../../lib/queries";
+import { keys, useActivity, useComments, useCycles, useFields, useLabels, useMembers, useStates } from "../../lib/queries";
+import { formatMinutes } from "../../lib/time";
 import { toastError } from "../../lib/toast";
 import { useWs } from "../shell/context";
+import { fieldValueText } from "./fields";
 import { cycleLabel } from "./options";
 
 const SOURCE_NAME: Record<string, string> = { linear: "Linear", jira: "Jira", trello: "Trello" };
@@ -32,8 +34,10 @@ function useDescribe() {
   const members = useMembers(slug);
   const labels = useLabels(slug);
   const cycles = useCycles(slug);
+  const fields = useFields(slug);
   const stateName = (id: unknown) => states.data?.find((s) => s.id === id)?.name ?? "a removed status";
   const memberName = (id: unknown) => members.data?.find((m) => m.userId === id)?.name ?? "a former member";
+  const memberNames = (ids: unknown) => (Array.isArray(ids) ? ids : []).map(memberName).join(", ");
   const labelNames = (ids: unknown) =>
     (Array.isArray(ids) ? ids : []).map((id) => labels.data?.find((l) => l.id === id)?.name ?? "a removed label").join(", ");
   const cycleName = (id: unknown) => {
@@ -61,7 +65,7 @@ function useDescribe() {
       case "pr_merged":
         return <>merged pull request {prLink(d)}</>;
       case "created":
-        return "created the issue";
+        return d.recurringId ? "created this from a recurring template" : d.templateId ? "created the issue from a template" : "created the issue";
       case "title":
         return `renamed it to "${String(d.to ?? "")}"`;
       case "description":
@@ -73,6 +77,22 @@ function useDescribe() {
         return `set priority to ${PRIORITY_LABELS[(Number(d.to) || 0) as Priority]}`;
       case "assignee":
         return d.to ? `assigned it to ${memberName(d.to)}` : "removed the assignee";
+      case "assignees": {
+        const parts = [];
+        if (Array.isArray(d.added) && d.added.length) parts.push(`assigned ${memberNames(d.added)}`);
+        if (Array.isArray(d.removed) && d.removed.length) parts.push(`removed ${memberNames(d.removed)}`);
+        return parts.join(" and ") || "changed assignees";
+      }
+      case "field": {
+        const f = fields.data?.find((x) => x.id === d.fieldId);
+        const name = f?.name ?? "a removed field";
+        const empty = (v: unknown) => v === null || v === undefined || (Array.isArray(v) && v.length === 0);
+        if (empty(d.to)) return `cleared ${name}`;
+        if (empty(d.from)) return `set ${name} to ${fieldValueText(f, d.to, members.data)}`;
+        return `changed ${name} from ${fieldValueText(f, d.from, members.data)} to ${fieldValueText(f, d.to, members.data)}`;
+      }
+      case "time_logged":
+        return `logged ${formatMinutes(Number(d.minutes) || 0)}`;
       case "labels": {
         const parts = [];
         if (Array.isArray(d.added) && d.added.length) parts.push(`added ${labelNames(d.added)}`);

@@ -8,6 +8,7 @@ export const paths = {
   teamCycles: (slug: string, key: string) => `/${slug}/team/${key}/cycles`,
   view: (slug: string, id: string) => `/${slug}/view/${id}`,
   issue: (slug: string, identifier: string) => `/${slug}/issue/${identifier}`,
+  time: (slug: string) => `/${slug}/time`,
   settings: (slug: string, tab?: string) => (tab && tab !== "general" ? `/${slug}/settings/${tab}` : `/${slug}/settings`),
   finances: () => "/finances",
   admin: () => "/admin",

@@ -120,14 +120,21 @@ export type IssueFilter = z.infer<typeof issueFilterSchema>;
 export const relationSchema = z.object({ relatedIssueId: uuid, type: z.enum(RELATION_TYPES) });
 export const commentSchema = z.object({ body: z.string().trim().min(1).max(50_000) });
 
-export const savedViewSchema = z.object({
+const savedViewFields = {
   name: z.string().trim().min(1).max(60),
   teamId: uuid.nullish(),
-  shared: z.boolean().default(false),
-  layout: z.enum(["list", "board"]).default("list"),
-  filters: issueFilterSchema.default({}),
+  shared: z.boolean(),
+  layout: z.enum(["list", "board"]),
+  filters: issueFilterSchema,
+};
+export const savedViewSchema = z.object({
+  ...savedViewFields,
+  shared: savedViewFields.shared.default(false),
+  layout: savedViewFields.layout.default("list"),
+  filters: savedViewFields.filters.default({}),
 });
-export const updateSavedViewSchema = savedViewSchema.partial();
+// Built without defaults: zod 4 applies .default() even inside .partial(), which would reset unsent fields.
+export const updateSavedViewSchema = z.object(savedViewFields).partial();
 
 export const notificationSettingsSchema = z.object({
   digest: z.enum(DIGEST_FREQUENCIES),
@@ -161,34 +168,50 @@ export const timeEntrySchema = z.object({
   note: z.string().trim().max(500).optional(),
 });
 
-export const issueTemplateSchema = z.object({
-  teamId: uuid,
+const templateFields = {
   name: z.string().trim().min(1).max(80),
   title: z.string().trim().min(1).max(300),
-  description: z.string().max(100_000).default(""),
+  description: z.string().max(100_000),
   statusId: uuid.nullish(),
-  priority: priority.default(0),
-  labelIds: z.array(uuid).max(20).default([]),
-  assigneeIds: z.array(uuid).max(10).default([]),
+  priority,
+  labelIds: z.array(uuid).max(20),
+  assigneeIds: z.array(uuid).max(10),
   estimate: z.number().min(0).max(1000).nullish(),
-  fields: z.record(uuid, z.unknown()).default({}),
+  fields: z.record(uuid, z.unknown()),
+};
+export const issueTemplateSchema = z.object({
+  teamId: uuid,
+  ...templateFields,
+  description: templateFields.description.default(""),
+  priority: priority.default(0),
+  labelIds: templateFields.labelIds.default([]),
+  assigneeIds: templateFields.assigneeIds.default([]),
+  fields: templateFields.fields.default({}),
 });
-export const updateIssueTemplateSchema = issueTemplateSchema.omit({ teamId: true }).partial();
+export const updateIssueTemplateSchema = z.object(templateFields).partial();
 
 export const RECURRENCE_FREQUENCIES = ["daily", "weekly", "monthly", "yearly"] as const;
+const recurringFields = {
+  frequency: z.enum(RECURRENCE_FREQUENCIES),
+  interval: z.number().int().min(1).max(365),
+  /** 0 = Sunday ... 6 = Saturday, for weekly. */
+  weekdays: z.array(z.number().int().min(0).max(6)).max(7),
+  monthDay: z.number().int().min(1).max(31).nullish(),
+  hour: z.number().int().min(0).max(23),
+  timezone: z.string().max(60),
+  startsOn: dateOnly,
+  active: z.boolean(),
+};
 export const recurringIssueSchema = z.object({
   templateId: uuid,
-  frequency: z.enum(RECURRENCE_FREQUENCIES),
-  interval: z.number().int().min(1).max(365).default(1),
-  /** 0 = Sunday ... 6 = Saturday, for weekly. */
-  weekdays: z.array(z.number().int().min(0).max(6)).max(7).default([]),
-  monthDay: z.number().int().min(1).max(31).nullish(),
-  hour: z.number().int().min(0).max(23).default(9),
-  timezone: z.string().max(60).default("UTC"),
-  startsOn: dateOnly,
-  active: z.boolean().default(true),
+  ...recurringFields,
+  interval: recurringFields.interval.default(1),
+  weekdays: recurringFields.weekdays.default([]),
+  hour: recurringFields.hour.default(9),
+  timezone: recurringFields.timezone.default("UTC"),
+  active: recurringFields.active.default(true),
 });
-export const updateRecurringIssueSchema = recurringIssueSchema.omit({ templateId: true }).partial();
+export const updateRecurringIssueSchema = z.object(recurringFields).partial();
 
 export const ssoConfigSchema = z.object({
   issuer: z.url().max(500),

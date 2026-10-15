@@ -8,9 +8,11 @@ export interface FilterSearch {
   priority?: string;
   cycle?: string;
   q?: string;
+  /** Custom field filters, "fieldId:value" joined by commas. */
+  field?: string;
 }
 
-export const FILTER_KEYS = ["status", "assignee", "label", "priority", "cycle", "q"] as const;
+export const FILTER_KEYS = ["status", "assignee", "label", "priority", "cycle", "q", "field"] as const;
 
 const str = (v: unknown): string | undefined => {
   if (v === undefined || v === null || v === "") return undefined;
@@ -42,6 +44,8 @@ export function searchToFilter(s: FilterSearch): IssueFilter {
   if (priority?.length) f.priority = priority;
   if (s.cycle) f.cycle = s.cycle;
   if (s.q) f.q = s.q;
+  const field = list(s.field)?.filter((x) => x.includes(":"));
+  if (field?.length) f.field = field;
   return f;
 }
 
@@ -53,6 +57,7 @@ export function filterToSearch(f: IssueFilter): FilterSearch {
   if (f.priority?.length) s.priority = f.priority.join(",");
   if (f.cycle) s.cycle = f.cycle;
   if (f.q) s.q = f.q;
+  if (f.field?.length) s.field = f.field.join(",");
   return s;
 }
 

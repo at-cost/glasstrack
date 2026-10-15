@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { Mail } from "lucide-react";
+import { KeyRound, Mail } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 /** Focuses the first [data-autofocus] field inside the card once it renders. */
@@ -35,7 +35,91 @@ const OAUTH_ERRORS: Record<string, string> = {
   oauth_state: "Sign-in was interrupted. Please try again.",
   oauth_provider: "That sign-in method is not available.",
   oauth_failed: "We could not sign you in with that account.",
+  sso_not_configured: "Single sign-on isn't set up for that workspace.",
+  sso_provider: "We couldn't reach your company's sign-in provider. Try again, or ask an admin to check the setup.",
+  sso_state: "Sign-in was interrupted. Please try again.",
+  sso_denied: "Sign-in was cancelled at your company's sign-in page.",
+  sso_failed: "We couldn't sign you in with single sign-on. Try again, or ask an admin to check the setup.",
+  sso_no_email: "Your company's sign-in didn't share an email address. Ask an admin to allow the email scope.",
+  sso_email_unverified: "Your email address isn't verified with your company's sign-in provider.",
+  sso_domain: "Your email domain isn't allowed for this workspace.",
+  sso_not_member: "You're not a member of this workspace yet. Ask an admin to invite you.",
 };
+
+const ssoStart = (slug: string, redirectTo: string) =>
+  `/api/v1/auth/sso/${encodeURIComponent(slug)}/start?redirectTo=${encodeURIComponent(redirectTo === "/" ? `/${slug}` : redirectTo)}`;
+
+/** Finds the workspaces that offer SSO for a work email, then hands over to the provider. */
+function SsoLookup({ redirect, onBack }: { redirect: string; onBack: () => void }) {
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [found, setFound] = useState<{ slug: string; name: string }[] | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => input.current?.focus(), []);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    setFound(null);
+    try {
+      const r = await api.ssoDiscover(email.trim());
+      if (r.workspaces.length === 1) {
+        window.location.assign(ssoStart(r.workspaces[0]!.slug, redirect));
+        return;
+      }
+      if (r.workspaces.length === 0) setError("No single sign-on is set up for that email domain.");
+      else setFound(r.workspaces);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+    setBusy(false);
+  };
+  return (
+    <>
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      <form onSubmit={submit} className="stack">
+        <label className="field">
+          <span className="field-label">Work email</span>
+          <input
+            className="input"
+            type="email"
+            required
+            autoComplete="email"
+            ref={input}
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setError(null);
+            }}
+            placeholder="you@company.com"
+          />
+        </label>
+        <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email.trim()}>
+          {busy ? <Spinner label="Looking up" /> : <KeyRound size={15} aria-hidden="true" />}
+          Find my workspace
+        </button>
+      </form>
+      {found && (
+        <div className="stack-sm">
+          <p className="muted small">Pick a workspace to sign in to:</p>
+          {found.map((w) => (
+            <a key={w.slug} className="btn btn-block" href={ssoStart(w.slug, redirect)}>
+              {w.name}
+            </a>
+          ))}
+        </div>
+      )}
+      <button type="button" className="btn btn-ghost btn-block" onClick={onBack}>
+        Use another way to sign in
+      </button>
+    </>
+  );
+}
 
 export function LoginPage() {
   const search = useSearch({ strict: false }) as { redirect?: string; error?: string };
@@ -47,6 +131,7 @@ export function LoginPage() {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(search.error ? (OAUTH_ERRORS[search.error] ?? "Sign-in failed.") : null);
+  const [sso, setSso] = useState(false);
 
   useEffect(() => {
     if (me.data) navigate({ to: redirect, replace: true });
@@ -80,6 +165,19 @@ export function LoginPage() {
   }
 
   const oauth = (p: "google" | "github") => `/api/v1/auth/oauth/${p}?redirectTo=${encodeURIComponent(redirect)}`;
+  if (sso) {
+    return (
+      <AuthCard title="Sign in with SSO">
+        <SsoLookup
+          redirect={redirect}
+          onBack={() => {
+            setSso(false);
+            setError(null);
+          }}
+        />
+      </AuthCard>
+    );
+  }
   return (
     <AuthCard title="Sign in">
       {error && (
@@ -123,6 +221,17 @@ export function LoginPage() {
           Email me a sign-in link
         </button>
       </form>
+      <button
+        type="button"
+        className="btn btn-block"
+        onClick={() => {
+          setSso(true);
+          setError(null);
+        }}
+      >
+        <KeyRound size={15} aria-hidden="true" />
+        Sign in with SSO
+      </button>
     </AuthCard>
   );
 }

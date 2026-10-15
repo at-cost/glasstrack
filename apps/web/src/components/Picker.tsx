@@ -103,6 +103,7 @@ export function OptionList({
       <input
         ref={inputRef}
         className="optionlist-input"
+        data-autofocus={autoFocus || undefined}
         role="combobox"
         aria-expanded="true"
         aria-controls={listId}

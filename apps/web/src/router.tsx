@@ -8,6 +8,7 @@ import { InboxPage } from "./features/inbox/InboxPage";
 import { IssueDetailPage } from "./features/issue/IssueDetail";
 import { MyIssuesPage, TeamBacklogPage, TeamBoardPage, TeamIssuesPage, ViewPage } from "./features/issues/pages";
 import { SettingsPage } from "./features/settings/SettingsPage";
+import { TimePage } from "./features/time/TimePage";
 import { WorkspaceIndex, WorkspaceLayout } from "./features/shell/AppShell";
 
 function Root() {
@@ -64,6 +65,7 @@ const routeTree = rootRoute.addChildren([
     child("team/$teamKey/cycles", CyclesPage),
     child("view/$viewId", ViewPage),
     child("issue/$identifier", IssueDetailPage),
+    child("time", TimePage),
     child("settings", SettingsPage),
     child("settings/$tab", SettingsPage),
   ]),
@@ -79,7 +81,7 @@ function stringifySearch(obj: Record<string, unknown>): string {
     if (v === undefined || v === null || v === "") continue;
     p.set(k, typeof v === "object" ? JSON.stringify(v) : String(v));
   }
-  const s = p.toString().replace(/%2C/g, ",");
+  const s = p.toString().replace(/%2C/g, ",").replace(/%3A/g, ":");
   return s ? `?${s}` : "";
 }
 

@@ -111,7 +111,7 @@ const SHORTCUTS: [string[], string][] = [
   [["k"], "Previous issue in a list"],
   [["Enter"], "Open the focused issue"],
   [["s"], "Change status"],
-  [["a"], "Assign"],
+  [["a"], "Edit assignees"],
   [["p"], "Set priority"],
   [["l"], "Edit labels"],
   [["Space"], "Pick up or drop a board card, then use arrow keys"],

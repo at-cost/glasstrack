@@ -121,6 +121,18 @@ describe("templates and recurring issues", () => {
     expect(await c.ok("GET", "/api/v1/w/acme/recurring")).toEqual([]);
   });
 
+  it("partial updates keep everything that wasn't sent", async () => {
+    const { c, team, annId } = await teamOf2();
+    const t = await c.ok("POST", "/api/v1/w/acme/templates", { teamId: team.id, name: "T", title: "T", description: "keep me", priority: 1, assigneeIds: [annId] });
+    const renamed = await c.ok("PATCH", `/api/v1/w/acme/templates/${t.id}`, { name: "T2" });
+    expect(renamed).toMatchObject({ name: "T2", description: "keep me", priority: 1, assigneeIds: [annId] });
+    const r = await c.ok("POST", "/api/v1/w/acme/recurring", { templateId: t.id, frequency: "monthly", interval: 2, monthDay: 15, hour: 14, timezone: "Europe/London", startsOn: "2026-01-01" });
+    const paused = await c.ok("PATCH", `/api/v1/w/acme/recurring/${r.id}`, { active: false });
+    expect(paused).toMatchObject({ active: false, frequency: "monthly", interval: 2, monthDay: 15, hour: 14, timezone: "Europe/London" });
+    const v = await c.ok("POST", "/api/v1/w/acme/views", { name: "Mine", layout: "board", shared: true, filters: { priority: [1] } });
+    expect(await c.ok("PATCH", `/api/v1/w/acme/views/${v.id}`, { name: "Renamed" })).toMatchObject({ name: "Renamed", layout: "board", shared: true, filters: { priority: [1] } });
+  });
+
   it("validates templates like issues", async () => {
     const { c, team } = await teamOf2();
     expect((await c.post("/api/v1/w/acme/templates", { teamId: team.id, name: "x", title: "x", assigneeIds: ["00000000-0000-4000-8000-000000000000"] })).status).toBe(400);

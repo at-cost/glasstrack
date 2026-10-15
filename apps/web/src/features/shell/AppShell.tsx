@@ -21,6 +21,8 @@ import {
   Sun,
   Archive,
   Eye,
+  Clock,
+  KeyRound,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -30,13 +32,14 @@ import { ApiError, api, errorMessage } from "../../lib/api";
 import { lastWorkspace, paths, rememberWorkspace } from "../../lib/paths";
 import { keys, useBilling, useMe, useOperator, useTeams, useUnreadCount, useViews, useWorkspace } from "../../lib/queries";
 import { useRealtime } from "../../lib/realtime";
-import { setReadOnly, ui, useReadOnly, useUi } from "../../lib/store";
+import { setReadOnly, ui, useReadOnly, useSsoRequired, useUi } from "../../lib/store";
 import { effectiveTheme, toggleTheme, useTheme } from "../../lib/theme";
 import { CreateIssueDialog } from "../issue/CreateIssueDialog";
 import { QuickPicker } from "../issue/QuickPicker";
 import { CommandPalette } from "../palette/CommandPalette";
 import { ShortcutsHelp, useGlobalShortcuts } from "../palette/shortcuts";
 import { type WsContext, WorkspaceCtx, useWs } from "./context";
+import { TimerPill } from "./TimerPill";
 
 export function WorkspaceLayout() {
   const { slug } = useParams({ strict: false }) as { slug: string };
@@ -45,6 +48,7 @@ export function WorkspaceLayout() {
   const navigate = useNavigate();
   const readOnly = useReadOnly();
   const location = useRouterState({ select: (s) => s.location.href });
+  const ssoRequired = useSsoRequired();
 
   useEffect(() => {
     if (me.error instanceof ApiError && me.error.status === 401) {
@@ -66,6 +70,9 @@ export function WorkspaceLayout() {
     [me.data, ws.data, slug, readOnly],
   );
 
+  if (ssoRequired === slug || (ws.error instanceof ApiError && ws.error.code === "sso_required")) {
+    return <SsoRequiredPage slug={slug} redirectTo={location} />;
+  }
   if (ws.error) {
     const notFound = ws.error instanceof ApiError && ws.error.status === 404;
     if (ws.error instanceof ApiError && ws.error.status === 401) return <FullPageLoading />;
@@ -86,6 +93,28 @@ export function WorkspaceLayout() {
     <WorkspaceCtx.Provider value={ctx}>
       <Shell />
     </WorkspaceCtx.Provider>
+  );
+}
+
+/** Shown when the workspace only allows members who signed in through its SSO. */
+function SsoRequiredPage({ slug, redirectTo }: { slug: string; redirectTo: string }) {
+  const href = `/api/v1/auth/sso/${encodeURIComponent(slug)}/start?redirectTo=${encodeURIComponent(redirectTo || `/${slug}`)}`;
+  return (
+    <main className="auth-page">
+      <div className="auth-card">
+        <div className="brand-mark" aria-hidden="true">
+          <KeyRound size={26} />
+        </div>
+        <h1 className="auth-title">This workspace requires single sign-on</h1>
+        <p className="muted center">Sign in with your company account to continue.</p>
+        <a href={href} className="btn btn-primary btn-block">
+          Sign in with SSO
+        </a>
+        <Link to="/" className="btn btn-block">
+          Go to your workspaces
+        </Link>
+      </div>
+    </main>
   );
 }
 
@@ -125,6 +154,7 @@ function Shell() {
             <Menu size={18} />
           </button>
           <span className="mobile-title">Glasstrack</span>
+          <TimerPill compact />
           <button type="button" className="icon-btn" aria-label="Search" onClick={ui.openPalette}>
             <Search size={18} />
           </button>
@@ -292,6 +322,10 @@ function Sidebar() {
         )}
       </div>
       <div className="sidebar-bottom">
+        <TimerPill />
+        <NavLink to={paths.time(slug)} icon={<Clock size={16} />}>
+          Time
+        </NavLink>
         <NavLink to={paths.settings(slug)} icon={<Settings size={16} />}>
           Settings
         </NavLink>
