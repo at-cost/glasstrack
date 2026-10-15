@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { sql } from "kysely";
-import { type AppEnv } from "../context";
+import type { AppEnv } from "../context";
 import { badRequest, notFound } from "../lib/errors";
 import { assertTeamAccess, visibleTeamIds } from "./teams";
 

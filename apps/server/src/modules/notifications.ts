@@ -1,3 +1,4 @@
+import { visibleTeamIds } from "./teams";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -14,11 +15,13 @@ export const DEFAULT_EVENTS = Object.fromEntries(NOTIFICATION_KINDS.map((k) => [
 export const notificationRoutes = new Hono<AppEnv>()
   .get("/notifications", async (c) => {
     const user = requireUser(c);
+    const visible = await visibleTeamIds(c);
     const rows = await c.get("trx").selectFrom("notifications as n")
       .innerJoin("issues as i", "i.id", "n.issueId")
       .innerJoin("teams as t", "t.id", "i.teamId")
       .select(["n.id", "n.kind", "n.issueId", "n.actorId", "n.data", "n.createdAt", "n.readAt", "i.number", "t.key", "i.title"])
       .where("n.userId", "=", user.id)
+      .$if(visible !== null, (q) => q.where("i.teamId", "in", visible?.length ? visible : ["00000000-0000-0000-0000-000000000000"]))
       .orderBy("n.createdAt", "desc")
       .limit(200)
       .execute();

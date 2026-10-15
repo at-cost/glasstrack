@@ -26,7 +26,7 @@ export async function snapshotUsage(deps: Deps, day: string): Promise<number> {
   const r = await sql`
     INSERT INTO usage_daily (workspace_id, day, active_members, storage_bytes)
     SELECT w.id, ${day}::date,
-      (SELECT count(*) FROM workspace_members m WHERE m.workspace_id = w.id AND m.last_active_at > ${day}::date + 1 - interval '30 days'),
+      (SELECT count(*) FROM workspace_members m WHERE m.workspace_id = w.id AND m.role <> 'viewer' AND m.last_active_at > ${day}::date + 1 - interval '30 days'),
       coalesce((SELECT sum(size_bytes) FROM attachments a WHERE a.workspace_id = w.id AND a.deleted_at IS NULL), 0)
         + coalesce((SELECT sum(size_bytes) FROM exports e WHERE e.workspace_id = w.id AND e.status = 'done'), 0)
     FROM workspaces w WHERE w.status != 'deleting'

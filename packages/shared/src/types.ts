@@ -36,6 +36,8 @@ export interface Team {
   id: string;
   key: string;
   name: string;
+  /** Only team members and admins can see a private team and its issues. */
+  private?: boolean;
 }
 export interface WorkflowState {
   id: string;
@@ -94,7 +96,7 @@ export interface IssueRelation {
 }
 export interface IssueLink {
   id: string;
-  provider: "github";
+  provider: "github" | "gitlab" | "gitea";
   url: string;
   title: string;
   state: "open" | "closed" | "merged";
@@ -108,6 +110,8 @@ export interface IssueDetail extends Issue {
   relations: IssueRelation[];
   attachments: Attachment[];
   subscribed: boolean;
+  /** Set when the issue came from a request form or email inbox. */
+  requester?: { via: "form" | "email"; channelName: string | null; email: string | null; name: string | null } | null;
 }
 export interface Comment {
   id: string;

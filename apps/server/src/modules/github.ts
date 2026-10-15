@@ -33,9 +33,29 @@ interface PullRequestEvent {
   repository?: { full_name?: string };
 }
 
-async function linkPullRequest(trx: Tx, workspaceId: string, ev: PullRequestEvent, moveOnMerge: boolean): Promise<{ linked: string[]; moved: { issueId: string; statusId: string }[] }> {
+/** A pull or merge request from any provider, in one shape. */
+export interface ChangeRequest {
+  provider: "github" | "gitlab" | "gitea";
+  url: string;
+  number: number;
+  title: string;
+  body: string | null;
+  branch?: string;
+  repo?: string;
+  state: "open" | "closed" | "merged";
+}
+
+export function fromGithub(ev: PullRequestEvent): ChangeRequest {
   const pr = ev.pull_request;
-  const keys = findIssueKeys(pr.title, pr.body, pr.head?.ref);
+  return {
+    provider: "github", url: pr.html_url, number: pr.number, title: pr.title, body: pr.body, branch: pr.head?.ref, repo: ev.repository?.full_name,
+    state: pr.merged ? "merged" : pr.state === "closed" ? "closed" : "open",
+  };
+}
+
+/** Links a change request to the issues it mentions; on merge, optionally moves them to Done. */
+export async function linkPullRequest(trx: Tx, workspaceId: string, pr: ChangeRequest, moveOnMerge: boolean): Promise<{ linked: string[]; moved: { issueId: string; statusId: string }[] }> {
+  const keys = findIssueKeys(pr.title, pr.body, pr.branch);
   if (keys.length === 0) return { linked: [], moved: [] };
   const issues = await trx.selectFrom("issues as i").innerJoin("teams as t", "t.id", "i.teamId")
     .select(["i.id", "i.teamId", "i.statusId", "i.number", "t.key"])
@@ -44,20 +64,21 @@ async function linkPullRequest(trx: Tx, workspaceId: string, ev: PullRequestEven
       eb.or([eb("t.key", "=", k.key), eb("i.teamId", "in", eb.selectFrom("teamKeyAliases").select("teamId").where("key", "=", k.key))]),
     ]))))
     .execute();
-  const state = pr.merged ? "merged" : pr.state === "closed" ? "closed" : "open";
-  const title = `${ev.repository?.full_name ? `${ev.repository.full_name}#` : "#"}${pr.number} ${pr.title}`.slice(0, 300);
+  const state = pr.state;
+  const sep = pr.provider === "gitlab" ? "!" : "#";
+  const title = `${pr.repo ?? ""}${sep}${pr.number} ${pr.title}`.slice(0, 300);
   const linked: string[] = [];
   const moved: { issueId: string; statusId: string }[] = [];
   for (const issue of issues) {
-    const existing = await trx.selectFrom("issueLinks").select(["id", "state"]).where("issueId", "=", issue.id).where("url", "=", pr.html_url).executeTakeFirst();
+    const existing = await trx.selectFrom("issueLinks").select(["id", "state"]).where("issueId", "=", issue.id).where("url", "=", pr.url).executeTakeFirst();
     if (existing) {
       await trx.updateTable("issueLinks").set({ title, state, updatedAt: new Date() }).where("id", "=", existing.id).execute();
     } else {
-      await trx.insertInto("issueLinks").values({ id: uuid7(), workspaceId, issueId: issue.id, provider: "github", url: pr.html_url, title, state }).execute();
-      await trx.insertInto("activity").values({ workspaceId, issueId: issue.id, actorId: null, kind: "pr_linked", data: JSON.stringify({ url: pr.html_url, title }) }).execute();
+      await trx.insertInto("issueLinks").values({ id: uuid7(), workspaceId, issueId: issue.id, provider: pr.provider, url: pr.url, title, state }).execute();
+      await trx.insertInto("activity").values({ workspaceId, issueId: issue.id, actorId: null, kind: "pr_linked", data: JSON.stringify({ url: pr.url, title }) }).execute();
     }
     if (state === "merged" && existing?.state !== "merged") {
-      await trx.insertInto("activity").values({ workspaceId, issueId: issue.id, actorId: null, kind: "pr_merged", data: JSON.stringify({ url: pr.html_url, title }) }).execute();
+      await trx.insertInto("activity").values({ workspaceId, issueId: issue.id, actorId: null, kind: "pr_merged", data: JSON.stringify({ url: pr.url, title }) }).execute();
       if (moveOnMerge) {
         const cur = await trx.selectFrom("workflowStates").select("category").where("id", "=", issue.statusId).executeTakeFirst();
         if (cur && cur.category !== "completed" && cur.category !== "canceled") {
@@ -65,7 +86,7 @@ async function linkPullRequest(trx: Tx, workspaceId: string, ev: PullRequestEven
             .orderBy("position").executeTakeFirst();
           if (done) {
             await trx.updateTable("issues").set({ statusId: done.id, completedAt: new Date(), canceledAt: null, updatedAt: new Date() }).where("id", "=", issue.id).execute();
-            await trx.insertInto("activity").values({ workspaceId, issueId: issue.id, actorId: null, kind: "status", data: JSON.stringify({ from: issue.statusId, to: done.id, via: "github", url: pr.html_url }) }).execute();
+            await trx.insertInto("activity").values({ workspaceId, issueId: issue.id, actorId: null, kind: "status", data: JSON.stringify({ from: issue.statusId, to: done.id, via: pr.provider, url: pr.url }) }).execute();
             moved.push({ issueId: issue.id, statusId: done.id });
           }
         }
@@ -95,7 +116,7 @@ export const githubWebhookRoutes = new Hono<AppEnv>().post("/webhook/:workspaceI
   if (event !== "pull_request") return c.json({ ok: true, ignored: event });
   const ev = JSON.parse(raw) as PullRequestEvent;
   if (!["opened", "edited", "reopened", "closed", "synchronize", "ready_for_review"].includes(ev.action)) return c.json({ ok: true, ignored: ev.action });
-  const { linked, moved } = await asWorkspace(deps.dbs.app, workspaceId, (trx) => linkPullRequest(trx, workspaceId, ev, integ.moveOnMerge));
+  const { linked, moved } = await asWorkspace(deps.dbs.app, workspaceId, (trx) => linkPullRequest(trx, workspaceId, fromGithub(ev), integ.moveOnMerge));
   for (const m of moved) {
     await deps.jobs.send("automation.event", { workspaceId, issueId: m.issueId, actorId: "", events: [{ type: "status_changed", toStatusId: m.statusId, toCategory: "completed" }] }).catch(() => undefined);
   }

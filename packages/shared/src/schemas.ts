@@ -35,7 +35,8 @@ export const teamKeySchema = z
   .trim()
   .toUpperCase()
   .regex(/^[A-Z][A-Z0-9]{1,4}$/, "2-5 letters/digits, starting with a letter");
-export const createTeamSchema = z.object({ name: z.string().trim().min(1).max(60), key: teamKeySchema });
+// No .default() on private: .partial() keeps defaults, and PATCH must not reset it.
+export const createTeamSchema = z.object({ name: z.string().trim().min(1).max(60), key: teamKeySchema, private: z.boolean().optional() });
 export const updateTeamSchema = createTeamSchema.partial();
 
 export const stateSchema = z.object({

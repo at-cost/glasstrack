@@ -60,7 +60,7 @@ export interface WorkspacesTable {
 export interface WorkspaceMembersTable {
   workspaceId: string;
   userId: string;
-  role: "admin" | "member" | "guest";
+  role: "admin" | "member" | "guest" | "viewer";
   joinedAt: TsDefault;
   lastActiveAt: TsDefault;
 }
@@ -69,7 +69,7 @@ export interface InvitesTable {
   workspaceId: string;
   email: string | null;
   tokenHash: string;
-  role: "admin" | "member" | "guest";
+  role: "admin" | "member" | "guest" | "viewer";
   invitedBy: string | null;
   createdAt: TsDefault;
   expiresAt: Ts;
@@ -82,6 +82,7 @@ export interface TeamsTable {
   key: string;
   name: string;
   issueCounter: Generated<number>;
+  private: Generated<boolean>;
   createdAt: TsDefault;
   archivedAt: Ts | null;
 }
@@ -386,7 +387,7 @@ export interface IssueLinksTable {
   id: string;
   workspaceId: string;
   issueId: string;
-  provider: "github";
+  provider: "github" | "gitlab" | "gitea";
   url: string;
   title: string;
   state: "open" | "closed" | "merged";
@@ -398,6 +399,43 @@ export interface GithubIntegrationsTable {
   secret: string;
   moveOnMerge: Generated<boolean>;
   createdBy: string | null;
+  createdAt: TsDefault;
+}
+
+export interface GitIntegrationsTable {
+  workspaceId: string;
+  provider: "gitlab" | "gitea";
+  secret: string;
+  moveOnMerge: Generated<boolean>;
+  createdBy: string | null;
+  createdAt: TsDefault;
+}
+export interface IntakeChannelsTable {
+  id: string;
+  workspaceId: string;
+  teamId: string;
+  kind: "form" | "email";
+  token: string;
+  name: string;
+  intro: Generated<string>;
+  enabled: Generated<boolean>;
+  statusId: string | null;
+  labelIds: Generated<string[]>;
+  requireEmail: Generated<boolean>;
+  membersOnly: Generated<boolean>;
+  notifySubmitter: Generated<boolean>;
+  createdBy: string | null;
+  createdAt: TsDefault;
+  updatedAt: TsDefault;
+}
+export interface IntakeSubmissionsTable {
+  issueId: string;
+  workspaceId: string;
+  channelId: string | null;
+  submitterEmail: string | null;
+  submitterName: string | null;
+  messageId: string | null;
+  resolvedNotifiedAt: Ts | null;
   createdAt: TsDefault;
 }
 
@@ -568,6 +606,9 @@ export interface DB {
   webhookDeliveries: WebhookDeliveriesTable;
   issueLinks: IssueLinksTable;
   githubIntegrations: GithubIntegrationsTable;
+  gitIntegrations: GitIntegrationsTable;
+  intakeChannels: IntakeChannelsTable;
+  intakeSubmissions: IntakeSubmissionsTable;
   issueAssignees: IssueAssigneesTable;
   customFields: CustomFieldsTable;
   issueFieldValues: IssueFieldValuesTable;

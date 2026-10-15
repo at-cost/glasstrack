@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runDailyBilling } from "../src/billing/service";
 import { runDailyFinances } from "../src/finances/service";
 import { createHmac } from "node:crypto";
-import { type Client, createHarness, type Harness, setupWorkspace } from "./harness";
+import { Client, createHarness, type Harness, setupWorkspace } from "./harness";
 
 /**
  * Tenant isolation. Two workspaces with data in every tenant table; a member
@@ -88,6 +88,10 @@ beforeAll(async () => {
   await b.c.ok("POST", "/api/v1/w/bravo/recurring", { templateId: tpl.id, frequency: "weekly", startsOn: "2026-01-01" });
   await b.c.ok("POST", "/api/v1/w/bravo/automations", { name: "auto", trigger: "comment_added", actions: [{ type: "set_priority", priority: 3 }] });
   await b.c.ok("POST", `/api/v1/w/bravo/issues/${bIssue.id}/comments`, { body: "runs the automation" });
+  // Batch C rows for B: GitLab integration, a form with one submission.
+  await b.c.ok("PUT", "/api/v1/w/bravo/integrations/gitlab", { moveOnMerge: true });
+  const bForm = await b.c.ok("POST", "/api/v1/w/bravo/intake", { teamId: b.team.id, kind: "form", name: "Requests" });
+  await new Client(h).ok("POST", `/api/v1/forms/${bForm.address.split("/").pop()}`, { title: "From a stranger", email: "s@example.com" });
   await sql`INSERT INTO sso_configs (workspace_id, issuer, client_id, client_secret_enc, allowed_domains) VALUES (${bWorkspaceId}, 'https://idp.example', 'c', 'v1.x.y.z', '{b.example}')`.execute(h.deps.dbs.owner);
 });
 

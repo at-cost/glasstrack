@@ -41,6 +41,10 @@ Workspace endpoints live under `/api/v1/w/:slug`. Issues can be addressed by key
 | GET | `/w/:slug/reports/overview?from=&to=&team=` | Cycle time and lead time (p50/p75/p90 hours), histogram, weekly created/completed/open, completed by person and label |
 | GET | `/w/:slug/reports/cycles/:id` | Cycle burndown per day (points if the cycle uses estimates, otherwise issue count) |
 | GET / POST / PATCH / DELETE | `/w/:slug/automations[/:id]` | Automation rules (admins); `GET .../:id/runs` for the last 50 runs |
+| GET / PUT / DELETE | `/w/:slug/integrations/gitlab`, `/w/:slug/integrations/gitea` | GitLab and Gitea/Forgejo webhooks (admins): webhook URL, secret, move to Done on merge |
+| GET / POST / PATCH / DELETE | `/w/:slug/intake[/:id]` | Request forms and email inboxes (`kind: "form" \| "email"`); `rotateToken: true` gives a new address |
+| GET / POST | `/forms/:token` | Public request form (no sign-in): `{title, description?, email?, name?}` |
+| POST | `/inbound/email` | Raw email from your mail forwarder, see [EMAIL-TO-ISSUE.md](EMAIL-TO-ISSUE.md) |
 
 ## Webhooks
 
@@ -99,3 +103,22 @@ A rule is `{name, teamId?, enabled, trigger, triggerConfig, conditions, actions}
 - **Actions (up to 10, in order):** `set_status`, `set_priority`, `add_labels`, `remove_labels`, `set_assignees`, `add_assignees`, `set_field`, `comment`, `set_due_in_days`, `add_to_active_cycle`, `archive`.
 
 A rule that fails is logged with its error and doesn't stop other rules.
+
+## Roles and private teams
+
+- **admin**: everything, sees every team.
+- **member**: works in every team except private teams they aren't in.
+- **viewer**: free and read-only. Sees what a member would see; can only manage their own notifications and subscriptions.
+- **guest**: works only in teams they're added to.
+
+A team created with `private: true` (or changed with `PATCH /w/:slug/teams/:id`) is only visible to its members and admins: its issues, links to them from other issues, and notifications about them.
+
+## Git hosts
+
+Set the webhook in your host to the `webhookUrl` from the integration:
+
+- **GitHub:** content type JSON, the secret, "Pull requests" events.
+- **GitLab:** "Merge request events", with the secret as the Secret token.
+- **Gitea / Forgejo:** type Gitea/Forgejo, content type JSON, the secret, "Pull request" events.
+
+Mention an issue key (like `ENG-12`) in the title, description or branch name to link it.

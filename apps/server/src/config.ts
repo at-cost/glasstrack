@@ -24,6 +24,10 @@ const schema = z.object({
 
   SMTP_URL: z.string().default(""),
   EMAIL_FROM: z.string().default("Glasstrack <no-reply@localhost>"),
+  /** Email-to-issue: inboxes get <token>@this domain. Mail is POSTed to /api/v1/inbound/email (see docs/EMAIL-TO-ISSUE.md). */
+  INBOUND_EMAIL_DOMAIN: z.string().default(""),
+  /** Secret the mail forwarder sends as X-Glasstrack-Inbound-Secret to /api/v1/inbound/email. Empty disables the endpoint. */
+  INBOUND_EMAIL_SECRET: z.string().default(""),
 
   STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
   STORAGE_LOCAL_DIR: z.string().default("./data/files"),

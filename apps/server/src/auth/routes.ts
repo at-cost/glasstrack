@@ -47,7 +47,7 @@ export async function findOrCreateUser(
   return row.id;
 }
 
-function clientIp(c: Ctx): string {
+export function clientIp(c: Ctx): string {
   // Behind one trusted reverse proxy (Caddy/nginx) the last X-Forwarded-For hop is the client.
   const xff = c.req.header("x-forwarded-for");
   return xff?.split(",").pop()?.trim() || c.req.header("x-real-ip") || "local";

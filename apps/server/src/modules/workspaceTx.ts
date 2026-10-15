@@ -7,6 +7,8 @@ import { ApiError, notFound } from "../lib/errors";
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 /** Paths still writable when a workspace is read-only (export must always work). */
 const READ_ONLY_ALLOWED = [/\/exports$/, /\/notifications\/read$/, /\/billing\/topup$/, /\/billing\/auto-topup$/];
+/** Paths a read-only viewer may still call with POST/PUT/PATCH/DELETE. */
+const VIEWER_ALLOWED = [/\/notifications(\/[^/]+)?\/read$/, /\/notification-settings$/, /\/members\/[^/]+$/, /\/issues\/[^/]+\/subscription$/];
 
 /**
  * Wraps every /w/:slug request in one transaction as glasstrack_app with the
@@ -30,6 +32,10 @@ export const workspaceTx: MiddlewareHandler<AppEnv> = async (c, next) => {
       !READ_ONLY_ALLOWED.some((r) => r.test(c.req.path))
     ) {
       throw new ApiError(402, "read_only", "This workspace is read-only until its balance is topped up.");
+    }
+    // Viewers are read-only; they can still manage their own notifications and export.
+    if (ws.role === "viewer" && MUTATING.has(c.req.method) && !VIEWER_ALLOWED.some((r) => r.test(c.req.path))) {
+      throw new ApiError(403, "read_only_viewer", "Viewers can look but not change anything. Ask an admin to make you a member.");
     }
     // "SSO only" workspaces: members (not admins, so a broken setup can be fixed) must arrive via this workspace's SSO.
     if (ws.role !== "admin" && !tokenWs) {

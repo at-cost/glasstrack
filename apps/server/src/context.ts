@@ -56,7 +56,7 @@ export function requireUser(c: Ctx): SessionUser {
   return u;
 }
 
-const RANK: Record<Role, number> = { guest: 0, member: 1, admin: 2 };
+const RANK: Record<Role, number> = { viewer: -1, guest: 0, member: 1, admin: 2 };
 export function requireRole(c: Ctx, min: Role): void {
   if (RANK[c.get("ws").role] < RANK[min]) throw forbidden();
 }

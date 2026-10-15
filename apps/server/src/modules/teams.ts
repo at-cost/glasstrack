@@ -22,12 +22,26 @@ import { uuid7 } from "../lib/ids";
 import { insertTeam } from "./workspaces";
 import { audit } from "./audit";
 
-/** null = every team (members, admins); otherwise the guest's team ids. */
+/**
+ * Teams the current user can see. null = every team. Admins see all; guests
+ * only teams they belong to; members and viewers every team except private
+ * teams they aren't in.
+ */
 export async function visibleTeamIds(c: Ctx): Promise<string[] | null> {
-  if (c.get("ws").role !== "guest") return null;
+  const role = c.get("ws").role;
+  if (role === "admin") return null;
   const user = requireUser(c);
-  const rows = await c.get("trx").selectFrom("teamMembers").select("teamId").where("userId", "=", user.id).execute();
-  return rows.map((r) => r.teamId);
+  const trx = c.get("trx");
+  if (role === "guest") {
+    const rows = await trx.selectFrom("teamMembers").select("teamId").where("userId", "=", user.id).execute();
+    return rows.map((r) => r.teamId);
+  }
+  const hidden = await trx.selectFrom("teams as t").select("t.id").where("t.private", "=", true)
+    .where((eb) => eb.not(eb.exists(eb.selectFrom("teamMembers as m").select("m.teamId").whereRef("m.teamId", "=", "t.id").where("m.userId", "=", user.id))))
+    .execute();
+  if (hidden.length === 0) return null;
+  const all = await trx.selectFrom("teams").select("id").where("id", "not in", hidden.map((h) => h.id)).execute();
+  return all.map((t) => t.id);
 }
 
 export async function assertTeamAccess(c: Ctx, teamId: string): Promise<void> {
@@ -56,7 +70,7 @@ async function changed(trx: Tx, wsId: string, t: "team" | "state" | "label" | "c
 export const teamRoutes = new Hono<AppEnv>()
   .get("/teams", async (c) => {
     const visible = await visibleTeamIds(c);
-    let q = c.get("trx").selectFrom("teams").select(["id", "key", "name"]).where("archivedAt", "is", null).orderBy("name");
+    let q = c.get("trx").selectFrom("teams").select(["id", "key", "name", "private"]).where("archivedAt", "is", null).orderBy("name");
     if (visible) q = q.where("id", "in", visible.length ? visible : ["00000000-0000-0000-0000-000000000000"]);
     return c.json((await q.execute()) satisfies Team[]);
   })
@@ -66,9 +80,14 @@ export const teamRoutes = new Hono<AppEnv>()
     const ws = c.get("ws");
     try {
       const id = await insertTeam(c.get("trx"), ws.id, body.name, body.key);
+      if (body.private) {
+        await c.get("trx").updateTable("teams").set({ private: true }).where("id", "=", id).execute();
+        // The creator joins, so the team stays visible to them if they stop being an admin.
+        await c.get("trx").insertInto("teamMembers").values({ workspaceId: ws.id, teamId: id, userId: requireUser(c).id }).execute();
+      }
       await changed(c.get("trx"), ws.id, "team", id);
-      await audit(c, "team.created", "team", id, { name: body.name, key: body.key });
-      return c.json({ id, key: body.key, name: body.name } satisfies Team, 201);
+      await audit(c, "team.created", "team", id, { name: body.name, key: body.key, private: Boolean(body.private) });
+      return c.json({ id, key: body.key, name: body.name, private: Boolean(body.private) } satisfies Team, 201);
     } catch (e) {
       if (uniqueViolation(e)) throw conflict(`Team key ${body.key} is already used`);
       throw e;
@@ -92,7 +111,10 @@ export const teamRoutes = new Hono<AppEnv>()
     }
     try {
       const row = await trx.updateTable("teams").set(body).where("id", "=", teamId)
-        .returning(["id", "key", "name"]).executeTakeFirstOrThrow();
+        .returning(["id", "key", "name", "private"]).executeTakeFirstOrThrow();
+      if (body.private !== undefined && body.private !== team.private) {
+        await audit(c, body.private ? "team.made_private" : "team.made_public", "team", teamId, { name: row.name });
+      }
       await changed(trx, ws.id, "team", teamId);
       return c.json(row satisfies Team);
     } catch (e) {

@@ -34,6 +34,7 @@ export async function createBossJobs(config: Config): Promise<Jobs & { boss: PgB
       await boss.schedule("notifications.digest", "*/15 * * * *");
       await boss.schedule("maintenance.cleanup", "30 * * * *");
       await boss.schedule("recurring.tick", "*/5 * * * *");
+      await boss.schedule("intake.resolved", "*/5 * * * *");
       await boss.schedule("automation.scheduled", "5 * * * *");
       if (config.BILLING_ENABLED) {
         await boss.schedule("billing.daily", "10 0 * * *", null, { tz: "UTC" });

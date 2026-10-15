@@ -6,3 +6,4 @@ export * from "./types";
 export * from "./money";
 export * from "./recurrence";
 export * from "./automation";
+export * from "./intake";

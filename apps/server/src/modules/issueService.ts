@@ -99,7 +99,8 @@ export async function setAssignees(trx: Tx, workspaceId: string, issueId: string
  */
 export async function createIssueCore(
   trx: Tx,
-  p: { workspaceId: string; actorId: string; visible: string[] | null; input: IssueInput; activity?: Record<string, unknown> },
+  /** actorId null = submitted from outside (request form or email); mentions are then ignored. */
+  p: { workspaceId: string; actorId: string | null; visible: string[] | null; input: IssueInput; activity?: Record<string, unknown> },
 ): Promise<string> {
   const { input } = p;
   const team = await trx.selectFrom("teams").select(["id", "archivedAt"]).where("id", "=", input.teamId).executeTakeFirst();
@@ -145,7 +146,7 @@ export async function createIssueCore(
   await setAssignees(trx, p.workspaceId, id, input.assigneeIds);
   await writeFieldValues(trx, p.workspaceId, id, fieldValues);
   await recordActivity(trx, p.workspaceId, id, p.actorId, "created", p.activity ?? {});
-  const mentioned = await resolveMentions(trx, input.description);
+  const mentioned = p.actorId ? await resolveMentions(trx, input.description) : [];
   await subscribe(trx, p.workspaceId, id, [p.actorId, ...input.assigneeIds, ...mentioned]);
   await createNotifications(trx, { workspaceId: p.workspaceId, issueId: id, actorId: p.actorId, kind: "assigned", userIds: input.assigneeIds });
   await createNotifications(trx, { workspaceId: p.workspaceId, issueId: id, actorId: p.actorId, kind: "mentioned", userIds: mentioned });

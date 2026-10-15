@@ -36,7 +36,7 @@ import {
 import { queueWebhooks } from "./webhooks";
 import { createNotifications, resolveMentions, subscribe, subscribersOf } from "./notifyService";
 import { assertLabels } from "./issueService";
-import { assertTeamAccess, visibleTeamIds } from "./teams";
+import { visibleTeamIds } from "./teams";
 
 const ISSUE_COLUMNS = [
   "i.id",
@@ -225,17 +225,20 @@ export function filterFromQuery(c: Ctx): IssueFilter {
 export async function detail(c: Ctx, issue: Issue): Promise<IssueDetail> {
   const trx = c.get("trx");
   const user = requireUser(c);
+  // Linked issues in teams this user can't see (private teams, guests) are left out.
+  const visible = await visibleTeamIds(c);
+  const seen = (teamId: string) => !visible || visible.includes(teamId);
   const children = await trx.selectFrom("issues as i").innerJoin("teams as t", "t.id", "i.teamId")
-    .select(["i.id", "i.number", "t.key", "i.title", "i.statusId"])
+    .select(["i.id", "i.number", "t.key", "i.title", "i.statusId", "i.teamId"])
     .select((eb) => eb.selectFrom("issueAssignees as ca").select(sql<string[]>`coalesce(array_agg(ca.user_id), '{}')`.as("a")).whereRef("ca.issueId", "=", "i.id").as("assigneeIds"))
     .where("i.parentId", "=", issue.id).where("i.archivedAt", "is", null).orderBy("i.sortKey").execute();
   const outgoing = await trx.selectFrom("issueRelations as r").innerJoin("issues as o", "o.id", "r.relatedIssueId")
     .innerJoin("teams as t", "t.id", "o.teamId")
-    .select(["r.id", "r.type", "o.id as oid", "o.number", "t.key", "o.title", "o.statusId"])
+    .select(["r.id", "r.type", "o.id as oid", "o.number", "t.key", "o.title", "o.statusId", "o.teamId"])
     .where("r.issueId", "=", issue.id).execute();
   const incoming = await trx.selectFrom("issueRelations as r").innerJoin("issues as o", "o.id", "r.issueId")
     .innerJoin("teams as t", "t.id", "o.teamId")
-    .select(["r.id", "r.type", "o.id as oid", "o.number", "t.key", "o.title", "o.statusId"])
+    .select(["r.id", "r.type", "o.id as oid", "o.number", "t.key", "o.title", "o.statusId", "o.teamId"])
     .where("r.relatedIssueId", "=", issue.id).execute();
   const rel = (dir: "outgoing" | "incoming") => (r: (typeof outgoing)[number]): IssueRelation => ({
     id: r.id,
@@ -247,16 +250,19 @@ export async function detail(c: Ctx, issue: Issue): Promise<IssueDetail> {
     .where("userId", "=", user.id).executeTakeFirst();
   const spent = await trx.selectFrom("timeEntries").select(sql<string>`coalesce(sum(minutes), 0)`.as("m")).where("issueId", "=", issue.id).executeTakeFirstOrThrow();
   const timer = await trx.selectFrom("activeTimers").select("startedAt").where("issueId", "=", issue.id).where("userId", "=", user.id).executeTakeFirst();
+  const req = await trx.selectFrom("intakeSubmissions as s").leftJoin("intakeChannels as ch", "ch.id", "s.channelId")
+    .select(["s.submitterEmail", "s.submitterName", "ch.name", "ch.kind", "s.messageId"]).where("s.issueId", "=", issue.id).executeTakeFirst();
   const links = await trx.selectFrom("issueLinks").select(["id", "provider", "url", "title", "state"]).where("issueId", "=", issue.id).orderBy("createdAt").execute();
   return {
     ...issue,
     links,
-    children: children.map((ch) => ({ id: ch.id, identifier: `${ch.key}-${ch.number}`, title: ch.title, statusId: ch.statusId, assigneeIds: ch.assigneeIds ?? [] })),
+    children: children.filter((ch) => seen(ch.teamId)).map((ch) => ({ id: ch.id, identifier: `${ch.key}-${ch.number}`, title: ch.title, statusId: ch.statusId, assigneeIds: ch.assigneeIds ?? [] })),
     timeSpentMinutes: Number(spent.m),
     myTimerStartedAt: timer?.startedAt.toISOString() ?? null,
-    relations: [...outgoing.map(rel("outgoing")), ...incoming.map(rel("incoming"))],
+    relations: [...outgoing.filter((r) => seen(r.teamId)).map(rel("outgoing")), ...incoming.filter((r) => seen(r.teamId)).map(rel("incoming"))],
     attachments: await attachmentsFor(c, issue.id),
     subscribed: Boolean(sub),
+    requester: req ? { via: req.kind ?? (req.messageId ? "email" : "form"), channelName: req.name, email: req.submitterEmail, name: req.submitterName } : null,
   };
 }
 

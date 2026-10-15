@@ -247,6 +247,10 @@ export const handlers: Handlers = {
     const { deliverWebhook } = await import("../modules/webhooks");
     await deliverWebhook(deps, deliveryId);
   },
+  "intake.resolved": async (deps) => {
+    const { notifyResolvedRequests } = await import("../modules/intake");
+    await notifyResolvedRequests(deps);
+  },
   "recurring.tick": async (deps) => {
     const { runRecurring } = await import("../modules/templates");
     await runRecurring(deps);

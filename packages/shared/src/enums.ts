@@ -1,4 +1,5 @@
-export const ROLES = ["admin", "member", "guest"] as const;
+/** viewer: read-only and free (not counted as a member for costs). */
+export const ROLES = ["admin", "member", "guest", "viewer"] as const;
 export type Role = (typeof ROLES)[number];
 
 export const STATE_CATEGORIES = ["backlog", "unstarted", "started", "completed", "canceled"] as const;

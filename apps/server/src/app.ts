@@ -15,6 +15,8 @@ import { sessionMiddleware } from "./auth/session";
 import { ssoAuthRoutes, ssoSettingsRoutes } from "./auth/sso";
 import { auditRoutes } from "./modules/audit";
 import { automationRoutes } from "./modules/automations";
+import { gitForgeSettingsRoutes, gitForgeWebhookRoutes } from "./modules/gitForges";
+import { inboundEmailRoutes, intakeSettingsRoutes, publicFormRoutes } from "./modules/intake";
 import { reportRoutes } from "./modules/reports";
 import { fieldRoutes } from "./modules/fields";
 import { templateRoutes } from "./modules/templates";
@@ -104,7 +106,7 @@ export function createApp(deps: Deps) {
   api.use("*", async (c, next) => {
     // Files are streamed with their own limit; JSON bodies stay small.
     if (c.req.path.startsWith("/api/v1/files/")) return next();
-    const maxSize = c.req.path.endsWith("/import") ? 26 * 1024 * 1024 : 1024 * 1024;
+    const maxSize = c.req.path.endsWith("/import") ? 26 * 1024 * 1024 : c.req.path === "/api/v1/inbound/email" ? 16 * 1024 * 1024 : 1024 * 1024;
     return bodyLimit({ maxSize })(c, next);
   });
 
@@ -114,6 +116,9 @@ export function createApp(deps: Deps) {
   api.route("/public", publicFinanceRoutes);
   api.route("/admin", adminRoutes);
   api.route("/github", githubWebhookRoutes);
+  api.route("/git", gitForgeWebhookRoutes);
+  api.route("/forms", publicFormRoutes);
+  api.route("/inbound", inboundEmailRoutes);
   api.route("/files", fileRoutes);
   api.route("/", workspaceRootRoutes);
   api.route("/w/:slug", realtimeRoutes);
@@ -139,6 +144,8 @@ export function createApp(deps: Deps) {
   ws.route("/", ssoSettingsRoutes);
   ws.route("/", automationRoutes);
   ws.route("/", reportRoutes);
+  ws.route("/", gitForgeSettingsRoutes);
+  ws.route("/", intakeSettingsRoutes);
   api.route("/w/:slug", ws);
   api.all("*", (c) => c.json({ error: { code: "not_found", message: "Not found" } }, 404));
   app.route("/api/v1", api);
