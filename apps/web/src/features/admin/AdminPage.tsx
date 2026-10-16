@@ -5,13 +5,14 @@ import { useEffect, useState } from "react";
 import { Card } from "../../components/Card";
 import { ConfirmDialog, Dialog } from "../../components/Dialog";
 import { Empty, FullPageLoading, Spinner } from "../../components/Feedback";
-import { LineChart } from "../../components/LineChart";
-import { type AdminOverview, api, type CostCategory, type CostEntry, type CostInput, errorMessage } from "../../lib/api";
+import { type AdminOverview, api, type CostCategory, type CostEntry, type CostInput, errorMessage, type SavingEntry } from "../../lib/api";
 import { addDays, todayISO } from "../../lib/format";
-import { formatUsd, MICRO, microToInput, percent, shortDate, usdAxis } from "../../lib/money";
+import { formatUsd, microToInput, shortDate } from "../../lib/money";
 import { paths } from "../../lib/paths";
 import { keys, useMe, useOperator } from "../../lib/queries";
 import { toast, toastError } from "../../lib/toast";
+import { PricingSettingsCard } from "./PricingSettingsCard";
+import { RefundAllCard, RefundRequestsCard } from "./RefundsCards";
 
 export function AdminPage() {
   const me = useMe();
@@ -59,173 +60,89 @@ function Overview() {
   return (
     <div className="fin admin">
       <h1 className="fin-title">Operator admin</h1>
-      <Pricing o={o} />
-      <Costs o={o} />
-      <Recompute o={o} />
-      {o.history.length > 0 && (
-        <Card title="Last 90 days">
-          <LineChart
-            title="Revenue and costs per day"
-            days={o.history.map((r) => r.day)}
-            series={[
-              { key: "rev", label: "Revenue", color: "var(--series-1)", values: o.history.map((r) => r.revenueMicro) },
-              { key: "cost", label: "Costs", color: "var(--series-2)", values: o.history.map((r) => r.totalCostMicro) },
-            ]}
-            format={(v) => formatUsd(v, { precise: true })}
-            axisFormat={usdAxis}
-          />
-        </Card>
+      {!o.billingEnabled && (
+        <div className="notice notice-warning" role="status">
+          Billing is off on this server. Workspaces are not charged and refunds can't be made.
+        </div>
       )}
+      <Snapshot o={o} />
+      <RefundRequestsCard o={o} />
+      <PricingSettingsCard o={o} />
+      <Costs o={o} />
+      <Savings o={o} />
+      <Recompute o={o} />
+      <RefundAllCard o={o} />
     </div>
   );
 }
 
-function Pricing({ o }: { o: AdminOverview }) {
-  const [lowering, setLowering] = useState(false);
-  const rec = o.latest?.recommendedPriceMicro ?? null;
-  return (
-    <Card title="Price">
-      <dl className="tiles">
-        <div className="tile">
-          <dt>Current price</dt>
-          <dd data-testid="admin-price">{formatUsd(o.currentPriceMicro)}</dd>
-          <span className="tile-note">per workspace per month</span>
-        </div>
-        <div className="tile">
-          <dt>Recommended</dt>
-          <dd>{rec === null ? "None yet" : formatUsd(rec)}</dd>
-          <span className="tile-note">{o.latest ? `as of ${shortDate(o.latest.day)}` : "run a recompute first"}</span>
-        </div>
-        <div className="tile">
-          <dt>Margin</dt>
-          <dd>{o.latest ? percent(o.latest.marginBp) : "None"}</dd>
-          <span className="tile-note">{o.latest ? `${o.latest.payingWorkspaces} paying workspaces` : ""}</span>
-        </div>
-      </dl>
-      {o.canLower && rec !== null ? (
-        <div className="notice notice-accent">
-          <span>
-            Costs allow a lower price: {formatUsd(rec)} instead of {formatUsd(o.currentPriceMicro)}.
-          </span>
-          <div>
-            <button type="button" className="btn btn-primary" onClick={() => setLowering(true)}>
-              Lower price
-            </button>
-          </div>
-        </div>
-      ) : (
-        <p className="muted small">The recommendation is not below the current price, so there is nothing to lower.</p>
-      )}
-      <div className="subsection">
-        <h3 className="subsection-title">Price history</h3>
-        <ol className="price-history">
-          {o.pricing.map((p) => (
-            <li key={p.id}>
-              <span className="ph-price">{formatUsd(p.monthlyPriceMicro)}</span>
-              <span className="muted small nowrap">from {shortDate(p.effectiveFrom)}</span>
-              <span className="ph-reason">
-                {p.reason}
-                {p.createdBy && <span className="muted small"> by {p.createdBy}</span>}
-              </span>
-            </li>
-          ))}
-        </ol>
-      </div>
-      {lowering && <LowerPriceDialog o={o} onClose={() => setLowering(false)} />}
-    </Card>
-  );
-}
+const monthName = (ym: string) => new Date(`${ym}-01T00:00:00`).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
-function LowerPriceDialog({ o, onClose }: { o: AdminOverview; onClose: () => void }) {
-  const qc = useQueryClient();
-  const rec = o.latest?.recommendedPriceMicro ?? o.currentPriceMicro;
-  const [amount, setAmount] = useState(microToInput(rec));
-  const [reason, setReason] = useState(
-    o.latest ? `Costs fell. Recommended price on ${o.latest.day} at ${percent(o.latest.marginBp)} margin.` : "",
-  );
-  const [step, setStep] = useState<"edit" | "confirm">("edit");
-  const [busy, setBusy] = useState(false);
-  const micro = Math.round(Number(amount) * MICRO);
-  const valid = amount !== "" && micro >= 0 && micro < o.currentPriceMicro && reason.trim().length >= 3;
-  const run = async () => {
-    setBusy(true);
-    try {
-      await api.admin.lowerPrice(Number(amount), reason.trim());
-      await qc.invalidateQueries({ queryKey: keys.adminOverview });
-      qc.invalidateQueries({ queryKey: keys.publicFinances });
-      toast(`Price lowered to ${formatUsd(micro)}`, "success");
-      onClose();
-    } catch (e) {
-      toastError(errorMessage(e));
-      setBusy(false);
-    }
-  };
+function Snapshot({ o }: { o: AdminOverview }) {
+  const f = o.finances;
+  const t = f.thisMonth;
+  const credits = t.costs.filter((c) => c.paidByCredits).reduce((a, c) => a + c.amountMicro, 0);
+  const tiles: { label: string; value: string; note: string; id?: string }[] = [
+    {
+      label: "Costs this month",
+      value: formatUsd(t.totalCostMicro),
+      note: credits > 0 ? `${formatUsd(credits)} paid by provider credits` : `${formatUsd(t.paymentFeesMicro)} card fees`,
+      id: "admin-costs",
+    },
+    { label: "Revenue", value: formatUsd(t.revenueMicro), note: `${t.payingWorkspaces} paying, ${t.activeWorkspaces} active workspaces` },
+    { label: "Credit held", value: formatUsd(t.creditHeldMicro), note: "Unused prepaid balances, not income" },
+    { label: "Covered by the founder", value: formatUsd(t.founderGapMicro), note: "Costs and fees not covered by revenue" },
+    {
+      label: "Reserve",
+      value: formatUsd(f.reserve.balanceMicro),
+      note: `Target ${formatUsd(f.reserve.targetMicro)} (${f.reserve.targetMonths} ${f.reserve.targetMonths === 1 ? "month" : "months"} of costs)`,
+    },
+    {
+      label: "Server share cap",
+      value: formatUsd(f.serverShareCapMicro, { precise: true }),
+      note:
+        f.recommendedCapMicro !== null
+          ? `Recommended ${formatUsd(f.recommendedCapMicro, { precise: true })}`
+          : "No lower cap recommended yet",
+      id: "admin-cap",
+    },
+  ];
   return (
-    <Dialog
-      title={step === "edit" ? "Lower the price" : "Lower the price for good?"}
-      onClose={onClose}
-      size="sm"
-      footer={
-        step === "edit" ? (
-          <>
-            <button type="button" className="btn" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="button" className="btn btn-primary" disabled={!valid} onClick={() => setStep("confirm")}>
-              Continue
-            </button>
-          </>
-        ) : (
-          <>
-            <button type="button" className="btn" onClick={() => setStep("edit")}>
-              Back
-            </button>
-            <button type="button" className="btn btn-danger" disabled={busy} onClick={run} data-autofocus>
-              {busy && <Spinner label="Saving" />}
-              Lower to {formatUsd(micro)}
-            </button>
-          </>
-        )
+    <Card
+      title={
+        <>
+          {monthName(t.month)}
+          {f.example && (
+            <span className="badge" style={{ marginLeft: 8 }} data-testid="admin-example">
+              Example
+            </span>
+          )}
+        </>
+      }
+      actions={
+        <Link to={paths.finances()} className="btn btn-sm btn-ghost">
+          Public finances
+        </Link>
       }
     >
-      {step === "edit" ? (
-        <div className="stack">
-          <div className="field">
-            <label className="field-label" htmlFor="lower-amount">
-              New monthly price
-            </label>
-            <div className="input-prefix narrow">
-              <span className="prefix" aria-hidden="true">
-                $
-              </span>
-              <input
-                id="lower-amount"
-                className="input"
-                type="number"
-                min={0}
-                step="0.01"
-                value={amount}
-                data-autofocus
-                aria-invalid={amount !== "" && micro >= o.currentPriceMicro}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-            </div>
-            <p className="field-hint">Must be below {formatUsd(o.currentPriceMicro)}.</p>
-          </div>
-          <div className="field">
-            <label className="field-label" htmlFor="lower-reason">
-              Reason (shown publicly)
-            </label>
-            <textarea id="lower-reason" className="textarea" rows={3} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />
-          </div>
-        </div>
+      {f.example ? (
+        <p className="small">No real costs are recorded yet, so these are example figures. The public pages label them "Example" too.</p>
       ) : (
-        <p>
-          The price goes from {formatUsd(o.currentPriceMicro)} to <strong>{formatUsd(micro)}</strong> a month for every workspace.{" "}
-          <strong>It can never be raised again.</strong>
+        <p className="muted small">
+          {f.monthToDate ? `Month to date, ${shortDate(f.monthToDate.from)} to ${shortDate(f.monthToDate.to)}. ` : ""}Same figures as the
+          public finances page. Updated {shortDate(f.updatedAt)}.
         </p>
       )}
-    </Dialog>
+      <dl className="tiles">
+        {tiles.map((x) => (
+          <div className="tile" key={x.label}>
+            <dt>{x.label}</dt>
+            <dd data-testid={x.id}>{x.value}</dd>
+            <span className="tile-note">{x.note}</span>
+          </div>
+        ))}
+      </dl>
+    </Card>
   );
 }
 
@@ -253,8 +170,10 @@ function Costs({ o }: { o: AdminOverview }) {
       }
     >
       <p className="muted small">
-        {o.awsConfigured ? "AWS costs are imported automatically and can't be edited here." : "AWS cost import is off. Add every cost by hand."}{" "}
-        Each cost is spread evenly over its days.
+        {o.awsConfigured
+          ? "AWS costs are imported automatically and can't be edited here."
+          : "AWS cost import is off. Add every cost by hand."}{" "}
+        Each cost is spread evenly over its days. Costs paid with provider credits are still shown at list price.
       </p>
       {o.costs.length === 0 ? (
         <p className="muted small">No costs yet.</p>
@@ -288,6 +207,7 @@ function Costs({ o }: { o: AdminOverview }) {
                   <td>{o.categories[c.category] ?? c.category}</td>
                   <td>
                     <span className="badge">{c.source === "aws" ? "AWS" : "Manual"}</span>
+                    {c.paidByCredits && <div className="muted small">Paid by credits</div>}
                   </td>
                   <td className="num nowrap">{formatUsd(c.amountMicro, { precise: true })}</td>
                   <td className="num nowrap">
@@ -296,7 +216,12 @@ function Costs({ o }: { o: AdminOverview }) {
                         <button type="button" className="icon-btn small" aria-label={`Edit ${c.publicLabel}`} onClick={() => setEditing(c)}>
                           <Pencil size={13} />
                         </button>
-                        <button type="button" className="icon-btn small" aria-label={`Delete ${c.publicLabel}`} onClick={() => setDeleting(c)}>
+                        <button
+                          type="button"
+                          className="icon-btn small"
+                          aria-label={`Delete ${c.publicLabel}`}
+                          onClick={() => setDeleting(c)}
+                        >
                           <Trash2 size={13} />
                         </button>
                       </>
@@ -332,6 +257,7 @@ function CostDialog({ o, entry, onClose }: { o: AdminOverview; entry: CostEntry 
   const [amount, setAmount] = useState(entry ? microToInput(entry.amountMicro) : "");
   const [label, setLabel] = useState(entry?.publicLabel ?? "");
   const [note, setNote] = useState(entry?.note ?? "");
+  const [paidByCredits, setPaidByCredits] = useState(entry?.paidByCredits ?? false);
   const [busy, setBusy] = useState(false);
   const valid = periodStart && periodEnd && periodStart <= periodEnd && amount !== "" && Number(amount) >= 0;
   const save = async (e: React.FormEvent) => {
@@ -345,6 +271,7 @@ function CostDialog({ o, entry, onClose }: { o: AdminOverview; entry: CostEntry 
       amountUsd: Number(amount),
       publicLabel: label.trim() || undefined,
       note: note.trim() || undefined,
+      paidByCredits,
     };
     try {
       if (entry) await api.admin.updateCost(entry.id, body);
@@ -365,7 +292,14 @@ function CostDialog({ o, entry, onClose }: { o: AdminOverview; entry: CostEntry 
             <label className="field-label" htmlFor="cost-start">
               From
             </label>
-            <input id="cost-start" className="input" type="date" value={periodStart} data-autofocus onChange={(e) => setStart(e.target.value)} />
+            <input
+              id="cost-start"
+              className="input"
+              type="date"
+              value={periodStart}
+              data-autofocus
+              onChange={(e) => setStart(e.target.value)}
+            />
           </div>
           <div className="field">
             <label className="field-label" htmlFor="cost-end">
@@ -439,6 +373,10 @@ function CostDialog({ o, entry, onClose }: { o: AdminOverview; entry: CostEntry 
           </label>
           <input id="cost-note" className="input" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
+        <label className="check-row">
+          <input type="checkbox" checked={paidByCredits} onChange={(e) => setPaidByCredits(e.target.checked)} />
+          Paid by provider credits (shown at list price)
+        </label>
         <div className="row-end">
           <button type="button" className="btn" onClick={onClose}>
             Cancel
@@ -475,7 +413,9 @@ function Recompute({ o }: { o: AdminOverview }) {
   };
   return (
     <Card title="Recompute daily figures">
-      <p className="muted small">Rebuilds revenue, costs, reserve and the recommended price for each day in the range. Run it after changing costs.</p>
+      <p className="muted small">
+        Rebuilds revenue, costs, reserve and the recommended cap for each day in the range. Run it after changing costs.
+      </p>
       <form className="invite-form" onSubmit={run}>
         <div className="field">
           <label className="field-label" htmlFor="rc-from">
@@ -496,6 +436,140 @@ function Recompute({ o }: { o: AdminOverview }) {
           </button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+function Savings({ o }: { o: AdminOverview }) {
+  const qc = useQueryClient();
+  const [day, setDay] = useState(todayISO());
+  const [change, setChange] = useState("");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<SavingEntry | null>(null);
+  const valid = day !== "" && change.trim().length >= 3 && amount !== "" && Number(amount) >= 0;
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!valid) return;
+    setBusy(true);
+    try {
+      await api.admin.addSaving({ day, change: change.trim(), savingMonthUsd: Number(amount) });
+      await qc.invalidateQueries({ queryKey: keys.adminOverview });
+      qc.invalidateQueries({ queryKey: keys.publicFinances });
+      setChange("");
+      setAmount("");
+      toast("Saving added", "success");
+    } catch (err) {
+      toastError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (s: SavingEntry) => {
+    try {
+      await api.admin.deleteSaving(s.id);
+      await qc.invalidateQueries({ queryKey: keys.adminOverview });
+      qc.invalidateQueries({ queryKey: keys.publicFinances });
+      toast("Saving deleted", "success");
+    } catch (err) {
+      toastError(errorMessage(err));
+    }
+  };
+  return (
+    <Card title="Savings log">
+      <p className="muted small">Changes that made running Glasstrack cheaper. Shown on the public finances page.</p>
+      <form className="invite-form" onSubmit={add}>
+        <div className="field">
+          <label className="field-label" htmlFor="sv-day">
+            Date
+          </label>
+          <input id="sv-day" className="input" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
+        </div>
+        <div className="field grow">
+          <label className="field-label" htmlFor="sv-change">
+            What changed
+          </label>
+          <input id="sv-change" className="input" maxLength={300} value={change} onChange={(e) => setChange(e.target.value)} />
+        </div>
+        <div className="field">
+          <label className="field-label" htmlFor="sv-amount">
+            Saving a month
+          </label>
+          <div className="input-prefix narrow">
+            <span className="prefix" aria-hidden="true">
+              $
+            </span>
+            <input
+              id="sv-amount"
+              className="input"
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="invite-buttons">
+          <button type="submit" className="btn btn-primary" disabled={!valid || busy}>
+            <Plus size={14} aria-hidden="true" />
+            Add saving
+          </button>
+        </div>
+      </form>
+      {o.savings.length === 0 ? (
+        <p className="muted small">No savings logged yet.</p>
+      ) : (
+        <div className="table-wrap">
+          <table className="data-table" data-testid="savings">
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col">Change</th>
+                <th scope="col" className="num">
+                  Saving a month
+                </th>
+                <th scope="col">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {o.savings.map((s) => (
+                <tr key={s.id}>
+                  <td className="nowrap">{shortDate(s.day)}</td>
+                  <td>
+                    {s.change}
+                    {s.createdBy && <div className="muted small">by {s.createdBy}</div>}
+                  </td>
+                  <td className="num nowrap">{formatUsd(s.savingMonthMicro, { precise: true })}</td>
+                  <td className="num nowrap">
+                    <button
+                      type="button"
+                      className="icon-btn small"
+                      aria-label={`Delete saving: ${s.change}`}
+                      onClick={() => setDeleting(s)}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {deleting && (
+        <ConfirmDialog
+          title="Delete this saving?"
+          message={deleting.change}
+          confirmLabel="Delete saving"
+          danger
+          onConfirm={() => remove(deleting)}
+          onClose={() => setDeleting(null)}
+        />
+      )}
     </Card>
   );
 }

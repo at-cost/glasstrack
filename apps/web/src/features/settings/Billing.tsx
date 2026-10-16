@@ -4,16 +4,14 @@ import { MICRO } from "@glasstrack/shared";
 import { CreditCard } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Card } from "../../components/Card";
+import { ConfirmDialog } from "../../components/Dialog";
 import { Empty, Skeleton, Spinner } from "../../components/Feedback";
 import { type BillingOn, api, errorMessage } from "../../lib/api";
-import { formatBytes } from "../../lib/format";
 import { formatUsd, microToInput, shortDate, signedUsd } from "../../lib/money";
 import { paths } from "../../lib/paths";
 import { keys, useBilling } from "../../lib/queries";
-import { toast, toastError } from "../../lib/toast";
+import { toast } from "../../lib/toast";
 import { useWs } from "../shell/context";
-
-const gb = (bytes: number) => `${(bytes / 1024 ** 3).toLocaleString("en-US", { maximumFractionDigits: 1 })} GB`;
 
 const PRESETS = [10, 25, 50, 100];
 
@@ -21,11 +19,18 @@ const LEDGER_LABEL: Record<string, string> = {
   starter_grant: "Starter credit",
   topup: "Top-up",
   charge: "Daily charge",
-  storage_charge: "Extra storage",
+  storage_charge: "Storage",
   refund: "Refund",
   adjustment: "Adjustment",
 };
 const PAYMENT_LABEL: Record<string, string> = { topup: "Top-up", auto_topup: "Automatic top-up" };
+
+const precise = (micro: number) => formatUsd(micro, { precise: true });
+const usdSetting = (usd: number) => formatUsd(Math.round(usd * MICRO), { precise: true });
+const pct = (fraction: number) => `${(fraction * 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
+const longDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+/** Whole dollars and cents only. */
+const isCents = (n: number) => Number.isFinite(n) && Math.abs(Math.round(n * 100) - n * 100) < 1e-6;
 
 export function Billing() {
   const { slug, isAdmin } = useWs();
@@ -39,13 +44,15 @@ export function Billing() {
     <>
       <StatusNotice b={b} />
       <Balance b={b} />
+      <Costs b={b} />
       {isAdmin ? (
         <>
           <TopUp b={b} />
           <AutoTopUp b={b} />
+          <Refund b={b} />
         </>
       ) : (
-        <p className="muted small">Only workspace admins can add credit or change automatic top-up.</p>
+        <p className="muted small">Only workspace admins can add credit, change automatic top-up or ask for a refund.</p>
       )}
       <Ledger b={b} />
       <Payments b={b} />
@@ -103,10 +110,15 @@ function StatusNotice({ b }: { b: BillingOn }) {
   return null;
 }
 
+function lastsText(b: BillingOn): string {
+  const days = b.creditLastsDays;
+  if (days === null || b.dailyChargeMicro <= 0) return "Nothing is being charged right now.";
+  if (b.balanceMicro <= 0) return "No credit left.";
+  if (days === 0) return "Less than a day of credit left.";
+  return `Lasts about ${days.toLocaleString("en-US")} ${days === 1 ? "day" : "days"} at today's rate.`;
+}
+
 function Balance({ b }: { b: BillingOn }) {
-  const used = b.storage.bytes;
-  const free = b.storage.freeBytes;
-  const pct = free > 0 ? Math.min(100, (used / free) * 100) : 100;
   return (
     <Card title="Balance">
       <div className="balance-row">
@@ -114,57 +126,109 @@ function Balance({ b }: { b: BillingOn }) {
           <div className={`balance-big${b.balanceMicro <= 0 ? " negative" : ""}`} data-testid="billing-balance">
             {formatUsd(b.balanceMicro)}
           </div>
-          <p className="muted">
-            {b.daysRemaining === null
-              ? "Nothing is being charged right now."
-              : b.daysRemaining === 0
-                ? "Less than a day of credit left."
-                : `Lasts about ${b.daysRemaining} ${b.daysRemaining === 1 ? "day" : "days"} at ${formatUsd(b.dailyChargeMicro, { precise: true })} a day.`}
+          <p className="muted" data-testid="billing-lasts">
+            {lastsText(b)}
           </p>
         </div>
         <dl className="stat-list">
           <div>
-            <dt>Monthly price</dt>
-            <dd>{formatUsd(b.monthlyPriceMicro)}</dd>
+            <dt>Charged today</dt>
+            <dd>{precise(b.dailyChargeMicro)}</dd>
           </div>
           <div>
-            <dt>Charged per day</dt>
-            <dd>{formatUsd(b.dailyChargeMicro, { precise: true })}</dd>
+            <dt>About a month</dt>
+            <dd>{formatUsd(b.estimate.monthly.totalMicro)}</dd>
           </div>
         </dl>
       </div>
       <p className="small">
-        One flat price per workspace, with unlimited members. It is taken from your balance a little each day.{" "}
-        <Link to={paths.finances()}>See what it pays for</Link>.
+        You pay what this workspace costs to run, from prepaid credit, charged once a day. Members are unlimited. New workspaces start with{" "}
+        {usdSetting(b.pricing.signupCreditUsd)} of credit.
       </p>
-      <div className="subsection">
-        <h3 className="subsection-title">Storage</h3>
-        <div className="meter-row">
-          <span
-            className="progress"
-            role="progressbar"
-            aria-label="Storage used of the free allowance"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(pct)}
-          >
-            <span className="progress-fill" style={{ width: `${pct}%` }} />
-          </span>
-          <span className="small">
-            {formatBytes(used)} used of {gb(free)} free
-          </span>
+      <p className="muted small">
+        We email the admins when the balance drops below 25% of the last amount added. At $0 everything keeps working for 7 days, then the
+        workspace becomes read-only until someone tops up. Nothing is ever deleted.
+      </p>
+    </Card>
+  );
+}
+
+function Costs({ b }: { b: BillingOn }) {
+  const { monthly: m, daily: d, storageGb, emailsPerMonth, active } = b.estimate;
+  const s = b.pricing;
+  const rows: { label: string; note: string; month: number; day: number }[] = [
+    {
+      label: "Server share",
+      note: active
+        ? `Shared server costs split across active workspaces, at most ${usdSetting(s.serverShareCapUsd)} a month`
+        : "None while the workspace is inactive",
+      month: m.serverShareMicro,
+      day: d.serverShareMicro,
+    },
+    {
+      label: "Storage",
+      note: `${storageGb.toLocaleString("en-US", { maximumFractionDigits: 2 })} GB at ${usdSetting(s.storageUsdPerGbMonth)} per GB a month`,
+      month: m.storageMicro,
+      day: d.storageMicro,
+    },
+    {
+      label: "Email",
+      note: `${emailsPerMonth.toLocaleString("en-US")} ${emailsPerMonth === 1 ? "email" : "emails"} a month at ${usdSetting(s.emailUsdPer1000)} per 1,000`,
+      month: m.emailMicro,
+      day: d.emailMicro,
+    },
+    {
+      label: `Fees and reserve (${pct(s.feeMarkup)})`,
+      note: "Card fees and a small reserve for the service",
+      month: m.feesAndReserveMicro,
+      day: d.feesAndReserveMicro,
+    },
+  ];
+  return (
+    <Card title="What this workspace costs">
+      {!active && (
+        <div className="notice" role="status" data-testid="billing-inactive">
+          No activity in the last 30 days, so this workspace counts as inactive and pays only for storage and email.
         </div>
-        {b.storage.overageDailyMicro > 0 ? (
-          <p className="muted small">
-            Storage above the free allowance costs {formatUsd(b.storage.ratePerGbMonthMicro)} per GB a month. Right now that adds{" "}
-            {formatUsd(b.storage.overageDailyMicro, { precise: true })} a day.
-          </p>
-        ) : (
-          <p className="muted small">
-            Files above the free allowance cost {formatUsd(b.storage.ratePerGbMonthMicro)} per GB a month, charged daily.
-          </p>
-        )}
+      )}
+      <div className="table-wrap">
+        <table className="data-table" data-testid="billing-costs">
+          <thead>
+            <tr>
+              <th scope="col">Item</th>
+              <th scope="col" className="num">
+                Per month
+              </th>
+              <th scope="col" className="num">
+                Today
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.label}>
+                <th scope="row" style={{ fontWeight: 500 }}>
+                  {r.label}
+                  <div className="muted small">{r.note}</div>
+                </th>
+                <td className="num nowrap">{precise(r.month)}</td>
+                <td className="num nowrap">{precise(r.day)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row">Total</th>
+              <td className="num nowrap">{precise(m.totalMicro)}</td>
+              <td className="num nowrap">{precise(d.totalMicro)}</td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
+      <p className="small">
+        The monthly figure is an estimate from today's usage. Each day is charged at the month's amount divided by the days in the month.{" "}
+        <a href="/pricing">How the price is worked out</a> · <Link to={paths.finances()}>Our costs</Link>
+      </p>
     </Card>
   );
 }
@@ -173,22 +237,25 @@ function TopUp({ b }: { b: BillingOn }) {
   const { slug } = useWs();
   const min = b.limits.minTopupMicro / MICRO;
   const max = b.limits.maxTopupMicro / MICRO;
-  const [choice, setChoice] = useState<number | "custom">(PRESETS.find((p) => p >= min && p <= max) ?? "custom");
+  const presets = PRESETS.filter((p) => p >= min && p <= max);
+  const [choice, setChoice] = useState<number | "custom">(presets[0] ?? "custom");
   const [custom, setCustom] = useState("");
   const [saveCard, setSaveCard] = useState(!b.card);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const customId = useId();
   const amount = choice === "custom" ? Number(custom) : choice;
-  const valid = Number.isFinite(amount) && amount >= min && amount <= max && Math.round(amount * 100) === amount * 100;
+  const valid = (choice !== "custom" || custom.trim() !== "") && isCents(amount) && amount >= min && amount <= max;
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!valid) return;
     setBusy(true);
+    setError(null);
     try {
       const { url } = await api.ws(slug).topup(amount, saveCard);
       window.location.assign(url);
     } catch (err) {
-      toastError(errorMessage(err));
+      setError(errorMessage(err));
       setBusy(false);
     }
   };
@@ -198,7 +265,7 @@ function TopUp({ b }: { b: BillingOn }) {
         <fieldset className="fieldset">
           <legend className="field-label">Amount</legend>
           <div className="preset-row">
-            {PRESETS.filter((p) => p >= min && p <= max).map((p) => (
+            {presets.map((p) => (
               <label key={p} className={`preset${choice === p ? " on" : ""}`}>
                 <input type="radio" name="topup-amount" checked={choice === p} onChange={() => setChoice(p)} />${p}
               </label>
@@ -233,14 +300,29 @@ function TopUp({ b }: { b: BillingOn }) {
               />
             </div>
             <p className="field-hint" id={`${customId}-hint`}>
-              Between {formatUsd(b.limits.minTopupMicro)} and {formatUsd(b.limits.maxTopupMicro)}.
+              {custom !== "" && !valid ? "Enter an amount " : ""}Between {formatUsd(b.limits.minTopupMicro)} and{" "}
+              {formatUsd(b.limits.maxTopupMicro)}.
             </p>
           </div>
+        )}
+        {valid && b.estimate.monthly.totalMicro > 0 && (
+          <p className="muted small">
+            At today's rate {formatUsd(Math.round(amount * MICRO))} lasts about{" "}
+            {Math.floor((amount * MICRO) / (b.estimate.monthly.totalMicro / (365 / 12))).toLocaleString("en-US")} days.
+          </p>
         )}
         <label className="check-row">
           <input type="checkbox" checked={saveCard} onChange={(e) => setSaveCard(e.target.checked)} />
           Save this card for automatic top-ups
         </label>
+        {error && (
+          <div className="notice notice-danger" role="alert" data-testid="topup-error">
+            <span>
+              <strong>Checkout could not start.</strong> {error}
+            </span>
+            <span>Nothing was charged. Try again in a few minutes. If it keeps happening, the server's payment setup needs fixing.</span>
+          </div>
+        )}
         <div className="row">
           <button type="submit" className="btn btn-primary" disabled={!valid || busy}>
             {busy ? <Spinner label="Opening checkout" /> : <CreditCard size={14} aria-hidden="true" />}
@@ -261,28 +343,38 @@ function AutoTopUp({ b }: { b: BillingOn }) {
   const [enabled, setEnabled] = useState(b.autoTopup.enabled);
   const [threshold, setThreshold] = useState(b.autoTopup.thresholdMicro ? microToInput(b.autoTopup.thresholdMicro) : "5");
   const [amount, setAmount] = useState(b.autoTopup.amountMicro ? microToInput(b.autoTopup.amountMicro) : "25");
+  const [cap, setCap] = useState(b.monthlyCapMicro === null ? "" : microToInput(b.monthlyCapMicro));
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const noCard = !b.card;
   const t = Number(threshold);
   const a = Number(amount);
-  const valid = threshold !== "" && t >= 0 && t <= 1000 && a >= min && a <= max;
+  const c = cap.trim() === "" ? null : Number(cap);
+  const amountOk = amount !== "" && isCents(a) && a >= min && a <= max;
+  const capOk = c === null || (isCents(c) && c > 0 && (!amountOk || c >= a));
+  const valid = threshold !== "" && t >= 0 && t <= 1000 && amountOk && capOk;
+  const capMicro = c === null ? null : Math.round(c * MICRO);
   const dirty =
     enabled !== b.autoTopup.enabled ||
     Math.round(t * MICRO) !== b.autoTopup.thresholdMicro ||
-    Math.round(a * MICRO) !== b.autoTopup.amountMicro;
+    Math.round(a * MICRO) !== b.autoTopup.amountMicro ||
+    capMicro !== b.monthlyCapMicro;
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
+    setError(null);
     try {
-      await api.ws(slug).autoTopup({ enabled, thresholdUsd: t, amountUsd: a });
+      await api.ws(slug).autoTopup({ enabled, thresholdUsd: t, amountUsd: a, monthlyCapUsd: c });
       await qc.invalidateQueries({ queryKey: keys.billing(slug) });
       toast(enabled ? "Automatic top-up is on" : "Automatic top-up saved", "success");
     } catch (err) {
-      toastError(errorMessage(err));
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
   };
+  const spent = b.topupsThisMonthMicro;
+  const capReached = b.monthlyCapMicro !== null && spent + b.autoTopup.amountMicro > b.monthlyCapMicro;
   return (
     <Card title="Automatic top-up">
       <form className="stack" onSubmit={save}>
@@ -334,17 +426,123 @@ function AutoTopUp({ b }: { b: BillingOn }) {
               max={max}
               step="0.01"
               value={amount}
-              aria-invalid={enabled && !valid}
+              aria-invalid={amount !== "" && !amountOk}
+              aria-describedby="auto-amount-hint"
               onChange={(e) => setAmount(e.target.value)}
             />
           </div>
         </div>
+        <p className="field-hint" id="auto-amount-hint">
+          Each automatic top-up is between {formatUsd(b.limits.minTopupMicro)} and {formatUsd(b.limits.maxTopupMicro)}.
+        </p>
+        <div className="field">
+          <label className="field-label" htmlFor="auto-cap">
+            Monthly spending cap (optional)
+          </label>
+          <div className="input-prefix narrow">
+            <span className="prefix" aria-hidden="true">
+              $
+            </span>
+            <input
+              id="auto-cap"
+              className="input"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="0.01"
+              placeholder="No cap"
+              value={cap}
+              aria-invalid={!capOk}
+              aria-describedby="auto-cap-hint"
+              onChange={(e) => setCap(e.target.value)}
+            />
+          </div>
+          <p className="field-hint" id="auto-cap-hint">
+            {!capOk
+              ? "The cap must be at least one automatic top-up."
+              : "Automatic top-ups stop once this month's top-ups would go over the cap. Leave empty for no cap."}
+          </p>
+        </div>
+        <p className="small" data-testid="topups-this-month">
+          Top-ups this month: <strong>{formatUsd(spent)}</strong>
+          {b.monthlyCapMicro !== null ? ` of a ${formatUsd(b.monthlyCapMicro)} cap.` : ". No cap set."}
+          {capReached && b.autoTopup.enabled ? " The next automatic top-up would go over the cap, so it won't run until next month." : ""}
+        </p>
+        {error && (
+          <div className="notice notice-danger" role="alert">
+            {error}
+          </div>
+        )}
         <div>
-          <button type="submit" className="btn btn-primary" disabled={busy || !dirty || (enabled && !valid)}>
+          <button type="submit" className="btn btn-primary" disabled={busy || !dirty || !valid}>
             Save
           </button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+function Refund({ b }: { b: BillingOn }) {
+  const { slug } = useWs();
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const request = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.ws(slug).refundRequest();
+      await qc.invalidateQueries({ queryKey: keys.billing(slug) });
+      toast("Refund requested", "success");
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card title="Refund">
+      <p className="small">Unused credit you paid for can be refunded to your card. The signup credit is not cash, so it isn't refunded.</p>
+      <dl className="stat-list">
+        <div>
+          <dt>Refundable now</dt>
+          <dd data-testid="billing-refundable">{formatUsd(b.refundableMicro)}</dd>
+        </div>
+      </dl>
+      {b.refundRequestedAt ? (
+        <div className="notice notice-accent" role="status" data-testid="refund-requested">
+          Refund requested on {longDate(b.refundRequestedAt)}. We will refund the unused paid credit to your card and turn off automatic
+          top-up.
+        </div>
+      ) : (
+        <div>
+          <button type="button" className="btn" disabled={busy} onClick={() => setConfirming(true)}>
+            {busy && <Spinner label="Sending" />}
+            Request a refund of unused credit
+          </button>
+        </div>
+      )}
+      {error && (
+        <div className="notice notice-danger" role="alert" data-testid="refund-error">
+          {error}
+        </div>
+      )}
+      {confirming && (
+        <ConfirmDialog
+          title="Request a refund?"
+          message={
+            <>
+              We will refund up to {formatUsd(b.refundableMicro)} of unused paid credit to your card and turn off automatic top-up. The
+              workspace keeps running on any credit left until the refund is made.
+            </>
+          }
+          confirmLabel="Request refund"
+          onConfirm={request}
+          onClose={() => setConfirming(false)}
+        />
+      )}
     </Card>
   );
 }
@@ -370,7 +568,10 @@ function Ledger({ b }: { b: BillingOn }) {
               {b.ledger.map((l) => (
                 <tr key={l.id}>
                   <td className="nowrap">{shortDate(l.day ?? l.createdAt)}</td>
-                  <td>{l.memo || LEDGER_LABEL[l.kind] || l.kind}</td>
+                  <td>
+                    {LEDGER_LABEL[l.kind] ?? l.kind}
+                    {l.memo && l.memo !== LEDGER_LABEL[l.kind] && <div className="muted small">{l.memo}</div>}
+                  </td>
                   <td className={`num nowrap ${l.amountMicro >= 0 ? "amount-plus" : "amount-minus"}`}>{signedUsd(l.amountMicro)}</td>
                 </tr>
               ))}
@@ -407,7 +608,9 @@ function Payments({ b }: { b: BillingOn }) {
                 <td className="nowrap">{shortDate(p.createdAt)}</td>
                 <td>{PAYMENT_LABEL[p.kind] ?? p.kind}</td>
                 <td className="num nowrap">{formatUsd(p.amountMicro)}</td>
-                <td className="num nowrap">{p.feeMicro !== null ? formatUsd(p.feeMicro) : p.status === "succeeded" ? "Pending" : "None"}</td>
+                <td className="num nowrap">
+                  {p.feeMicro !== null ? formatUsd(p.feeMicro) : p.status === "succeeded" ? "Pending" : "None"}
+                </td>
                 <td>
                   <span className={`badge${p.status === "succeeded" ? " badge-accent" : ""}`}>{p.status}</span>
                 </td>
@@ -416,7 +619,7 @@ function Payments({ b }: { b: BillingOn }) {
           </tbody>
         </table>
       </div>
-      <p className="muted small">You get the full amount as credit. Card fees are counted as a cost on the public finances page.</p>
+      <p className="muted small">You get the full amount as credit. Card fees are paid from the fees and reserve part of each charge.</p>
     </Card>
   );
 }

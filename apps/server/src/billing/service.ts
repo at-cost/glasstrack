@@ -418,7 +418,12 @@ export async function refundUnusedCredit(deps: Deps, workspaceId: string, by: st
     remaining -= amountMicro;
     refunded += amountMicro;
   }
-  await sys.updateTable("billingAccounts").set({ refundRequestedAt: null, autoTopupEnabled: false, updatedAt: new Date() }).where("workspaceId", "=", workspaceId).execute();
+  // Only close the request when everything refundable was refunded (e.g. not when no Stripe payment could be found).
+  if (refunded > 0 && remaining < 10_000) {
+    await sys.updateTable("billingAccounts").set({ refundRequestedAt: null, autoTopupEnabled: false, updatedAt: new Date() }).where("workspaceId", "=", workspaceId).execute();
+  } else if (remaining >= 10_000) {
+    logger.warn({ workspaceId, remaining }, "refund incomplete: no payment left to refund against");
+  }
   return refunded;
 }
 

@@ -3,6 +3,7 @@ import type {
   AutomationRule,
   AuditEntry,
   Comment,
+  CostBreakdown,
   CustomField,
   Cycle,
   ExportJob,
@@ -19,6 +20,7 @@ import type {
   Member,
   Notification,
   NotificationSettings,
+  PricingSettings,
   PublicForm,
   RecurringIssue,
   Role,
@@ -177,14 +179,21 @@ export type Billing =
       enabled: true;
       status: "active" | "grace" | "read_only" | "deleting";
       balanceMicro: number;
-      monthlyPriceMicro: number;
+      /** What this workspace costs now, from the same module as the nightly charge. */
+      estimate: { monthly: CostBreakdown; daily: CostBreakdown; storageGb: number; emailsPerMonth: number; active: boolean };
       dailyChargeMicro: number;
       daysRemaining: number | null;
-      storage: { bytes: number; freeBytes: number; overageDailyMicro: number; ratePerGbMonthMicro: number };
+      /** Days the balance lasts at the monthly estimate (average month); null when nothing is charged. */
+      creditLastsDays: number | null;
+      refundableMicro: number;
+      refundRequestedAt: string | null;
       card: string | null;
       graceStartedAt: string | null;
       autoTopup: { enabled: boolean; thresholdMicro: number; amountMicro: number };
+      monthlyCapMicro: number | null;
+      topupsThisMonthMicro: number;
       limits: { minTopupMicro: number; maxTopupMicro: number };
+      pricing: PricingSettings;
       ledger: LedgerEntry[];
       payments: PaymentRow[];
     };
@@ -327,6 +336,8 @@ export interface CostEntry {
   amountMicro: number;
   publicLabel: string;
   note: string | null;
+  /** Shown at list price but paid with provider credits (e.g. AWS credits). */
+  paidByCredits: boolean;
   createdAt: string;
 }
 export interface CostInput {
@@ -336,16 +347,63 @@ export interface CostInput {
   amountUsd: number;
   publicLabel?: string;
   note?: string;
+  paidByCredits?: boolean;
+}
+/** One month of the public finances, as the operator overview returns it (micro-USD). */
+export interface AdminFinanceMonth {
+  month: string;
+  revenueMicro: number;
+  totalCostMicro: number;
+  founderGapMicro: number;
+  reserveMicro: number;
+  activeWorkspaces: number;
+  payingWorkspaces: number;
+  costPerWorkspaceMicro: number;
+  serverShareCapMicro: number;
+}
+/** The same aggregate finances the public site shows (server: finances/public.ts PublicFinances). */
+export interface AdminFinances {
+  example: boolean;
+  updatedAt: string;
+  monthToDate?: { from: string; to: string };
+  thisMonth: AdminFinanceMonth & {
+    costs: { label: string; amountMicro: number; paidByCredits: boolean }[];
+    paymentFeesMicro: number;
+    creditHeldMicro: number;
+  };
+  reserve: { balanceMicro: number; targetMicro: number; targetMonths: number };
+  serverShareCapMicro: number;
+  recommendedCapMicro: number | null;
+  capHistory: { from: string; capMicro: number; reason: string }[];
+  history: AdminFinanceMonth[];
+  savings: { date: string; change: string; savingMonthMicro: number }[];
+}
+export interface SavingEntry {
+  id: string;
+  day: string;
+  change: string;
+  savingMonthMicro: number;
+  createdBy: string | null;
+}
+export interface RefundRequest {
+  workspaceId: string;
+  name: string;
+  slug: string;
+  requestedAt: string;
+  balanceMicro: number;
+  refundableMicro: number;
 }
 export interface AdminOverview {
-  currentPriceMicro: number;
-  latest: FinanceDay | null;
-  canLower: boolean;
+  billingEnabled: boolean;
   awsConfigured: boolean;
   categories: Record<string, string>;
+  settings: PricingSettings & { id: number | null; effectiveFrom: string | null };
+  defaults: PricingSettings;
+  settingsHistory: { id: number; effectiveFrom: string; serverShareCapUsd: number; reason: string; createdBy: string | null }[];
+  finances: AdminFinances;
   costs: CostEntry[];
-  pricing: { id: string | number; effectiveFrom: string; monthlyPriceMicro: number; reason: string; createdBy: string | null }[];
-  history: FinanceDay[];
+  savings: SavingEntry[];
+  refundRequests: RefundRequest[];
 }
 
 export const api = {
@@ -358,8 +416,15 @@ export const api = {
     addCost: (b: CostInput) => post<{ id: string }>("/admin/costs", b),
     updateCost: (id: string, b: CostInput) => patch<{ ok: true }>(`/admin/costs/${id}`, b),
     deleteCost: (id: string) => del<{ ok: true }>(`/admin/costs/${id}`),
-    recompute: (from: string, to?: string) => post<{ days: number }>("/admin/finances/recompute", { from, to }),
-    lowerPrice: (monthlyUsd: number, reason: string) => post<{ monthlyPriceMicro: number }>("/admin/pricing/lower", { monthlyUsd, reason }),
+    recompute: (from: string, to?: string) => post<{ days: number; to: string }>("/admin/finances/recompute", { from, to }),
+    /** New pricing settings version: only the changed fields plus a reason. The server share cap can only go down. */
+    updatePricing: (b: Partial<PricingSettings> & { reason: string }) =>
+      post<PricingSettings & { id: number | null; effectiveFrom: string | null }>("/admin/pricing", b),
+    addSaving: (b: { day: string; change: string; savingMonthUsd: number }) => post<{ id: string }>("/admin/savings", b),
+    deleteSaving: (id: string) => del<{ ok: true }>(`/admin/savings/${id}`),
+    refund: (workspaceId: string) => post<{ refundedMicro: number }>(`/admin/refunds/${workspaceId}`),
+    refundAll: (confirm: string) =>
+      post<{ workspaces: number; refundedMicro: number; failed: string[] }>("/admin/refunds-all", { confirm }),
   },
 
   providers: () => get<{ google: boolean; github: boolean; magicLink: boolean }>("/auth/providers"),
@@ -478,7 +543,9 @@ export const api = {
 
       billing: () => get<Billing>(`${w}/billing`),
       topup: (amountUsd: number, saveCard: boolean) => post<{ url: string }>(`${w}/billing/topup`, { amountUsd, saveCard }),
-      autoTopup: (b: { enabled: boolean; thresholdUsd: number; amountUsd: number }) => put<{ ok: true }>(`${w}/billing/auto-topup`, b),
+      autoTopup: (b: { enabled: boolean; thresholdUsd: number; amountUsd: number; monthlyCapUsd?: number | null }) =>
+        put<{ ok: true }>(`${w}/billing/auto-topup`, b),
+      refundRequest: () => post<{ ok: true; refundableMicro: number }>(`${w}/billing/refund-request`),
 
       tokens: () => get<ApiToken[]>(`${w}/tokens`),
       createToken: (name: string, expiresInDays: number | null) =>

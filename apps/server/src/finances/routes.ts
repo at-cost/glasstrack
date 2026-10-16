@@ -4,7 +4,7 @@ import { assertCapNotIncreased, DEFAULT_PRICING, type PricingSettings, usdToMicr
 import { loadSettings } from "../billing/pricing";
 import { balanceMicro, refundableMicro, refundAll, refundUnusedCredit } from "../billing/service";
 import { type AppEnv, type Ctx, requireUser } from "../context";
-import { badRequest, forbidden, notFound } from "../lib/errors";
+import { ApiError, badRequest, forbidden, notFound } from "../lib/errors";
 import { uuid7 } from "../lib/ids";
 import { clearPublicCache, financesCsv, getPublicFinances, getPublicPricing } from "./public";
 import { addDays, CATEGORY_LABELS, financesEnabled, isoDay, recompute } from "./service";
@@ -92,7 +92,12 @@ export const adminRoutes = new Hono<AppEnv>()
       categories: CATEGORY_LABELS,
       settings,
       defaults: DEFAULT_PRICING,
-      settingsHistory: settingsHistory.map((r) => ({ id: r.id, effectiveFrom: r.effectiveFrom.toISOString(), serverShareCapUsd: n(r.serverShareCapUsd), reason: r.reason, createdBy: r.createdBy })),
+      settingsHistory: settingsHistory.map((r) => ({
+        id: r.id, effectiveFrom: r.effectiveFrom.toISOString(), reason: r.reason, createdBy: r.createdBy,
+        serverShareCapUsd: n(r.serverShareCapUsd), signupCreditUsd: n(r.signupCreditUsd), feeMarkup: n(r.feeMarkup), minTopupUsd: n(r.minTopupUsd),
+        maxTopupUsd: n(r.maxTopupUsd), storageUsdPerGbMonth: n(r.storageUsdPerGbMonth), emailUsdPer1000: n(r.emailUsdPerThousand),
+        stripeFeePercent: n(r.stripeFeePercent), stripeFeeFixedUsd: n(r.stripeFeeFixedUsd), reserveTargetMonths: n(r.reserveTargetMonths),
+      })),
       finances,
       costs: costs.map((e) => ({ ...e, amountMicro: n(e.amountMicro), createdAt: e.createdAt.toISOString() })),
       savings: savings.map((s) => ({ id: s.id, day: s.day, change: s.change, savingMonthMicro: n(s.savingMonthMicro), createdBy: s.createdBy })),
@@ -171,8 +176,12 @@ export const adminRoutes = new Hono<AppEnv>()
     const user = requireOperator(c);
     const deps = c.get("deps");
     if (!deps.config.BILLING_ENABLED) throw badRequest("Billing is not enabled");
-    const refunded = await refundUnusedCredit(deps, c.req.param("workspaceId"), user.email);
-    return c.json({ refundedMicro: refunded });
+    try {
+      const refunded = await refundUnusedCredit(deps, c.req.param("workspaceId"), user.email);
+      return c.json({ refundedMicro: refunded });
+    } catch (err) {
+      throw new ApiError(502, "payment_provider", `Refund failed: ${String((err as Error).message ?? err)}`);
+    }
   })
   /** Service closing: refund every workspace. Needs the exact confirmation phrase. */
   .post("/refunds-all", async (c) => {
