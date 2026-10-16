@@ -5,6 +5,7 @@ import {
   formatUsd,
   monthlyCost,
   nextBillingState,
+  topupFeeMicro,
   usdToMicro,
 } from "@glasstrack/shared";
 import type { Deps } from "../context";
@@ -174,8 +175,16 @@ export async function runDailyBilling(deps: Deps, now = new Date()): Promise<{ w
   for (const ws of workspaces) {
     try {
       await ensureBillingAccount(sys, ws.id);
+      // A workspace with no billing history existed before billing was switched on (or never got its
+      // credit): give it the signup credit now and start charging today, never for days before.
+      const fresh = !ws.lastChargedOn && !(await sys.selectFrom("creditLedger").select("id").where("workspaceId", "=", ws.id).limit(1).executeTakeFirst());
+      if (fresh) {
+        const creator = await sys.selectFrom("workspaceMembers").select("userId").where("workspaceId", "=", ws.id).where("role", "=", "admin")
+          .orderBy("joinedAt").limit(1).executeTakeFirst();
+        if (creator) await grantStarterCredit(deps, { workspaceId: ws.id, userId: creator.userId });
+      }
       if (ws.status !== "read_only") {
-        let day = ws.lastChargedOn ? addDays(ws.lastChargedOn, 1) : isoDay(ws.createdAt);
+        let day = ws.lastChargedOn ? addDays(ws.lastChargedOn, 1) : fresh ? today : isoDay(ws.createdAt);
         if (day < addDays(today, -MAX_CATCH_UP_DAYS + 1)) day = addDays(today, -MAX_CATCH_UP_DAYS + 1);
         for (; day <= today; day = addDays(day, 1)) {
           const c = await chargeFor(deps, ws.id, await inputsFor(day), settings);
@@ -394,39 +403,49 @@ export async function refundableMicro(db: Db, workspaceId: string): Promise<numb
 
 /**
  * Refunds unused paid credit through the payment provider, newest payment
- * first, and records each refund in the ledger. Returns the amount refunded.
+ * first. Per the terms, the payment fees we were charged for that money are
+ * kept back: each refunded part of a payment loses its share of that
+ * payment's fee (the real Stripe fee, or the published rate if not known yet).
+ * The whole part leaves the balance; the card gets it minus the fee share.
+ * Returns the amount sent to the card.
  */
 export async function refundUnusedCredit(deps: Deps, workspaceId: string, by: string): Promise<number> {
   const sys = deps.dbs.system;
+  const settings = await loadSettings(sys);
   let remaining = await refundableMicro(sys, workspaceId);
   if (remaining <= 0) return 0;
-  const payments = await sys.selectFrom("payments").select(["id", "amountMicro", "stripePaymentIntentId"])
+  const payments = await sys.selectFrom("payments").select(["id", "amountMicro", "feeMicro", "stripePaymentIntentId"])
     .where("workspaceId", "=", workspaceId).where("status", "in", ["succeeded", "refunded"]).where("stripePaymentIntentId", "is not", null)
     .orderBy("succeededAt", "desc").execute();
-  let refunded = 0;
+  let sentToCard = 0;
   for (const p of payments) {
     if (remaining <= 0) break;
     const already = await sys.selectFrom("creditLedger").select(sql<string>`coalesce(-sum(amount_micro), 0)`.as("r"))
       .where("kind", "=", "refund").where("refType", "=", "payment").where("refId", "=", p.id).executeTakeFirstOrThrow();
-    const left = toNum(p.amountMicro) - toNum(already.r);
+    const amount = toNum(p.amountMicro);
+    const left = amount - toNum(already.r);
+    const part = Math.min(left, remaining);
+    if (part <= 0) continue;
+    const fee = p.feeMicro === null ? topupFeeMicro(settings, amount) : toNum(p.feeMicro);
+    const feeShare = Math.round((fee * part) / amount);
     // Stripe refunds whole cents.
-    const amountMicro = Math.floor(Math.min(left, remaining) / 10_000) * 10_000;
-    if (amountMicro <= 0) continue;
-    const r = await deps.payments.refund({ paymentIntentId: p.stripePaymentIntentId!, amountCents: amountMicro / 10_000, paymentId: p.id });
+    const cash = Math.max(0, Math.floor((part - feeShare) / 10_000) * 10_000);
+    const refundId = cash > 0 ? (await deps.payments.refund({ paymentIntentId: p.stripePaymentIntentId!, amountCents: cash / 10_000, paymentId: p.id })).id : `nocash:${p.id}:${toNum(already.r)}`;
     await addLedger(sys, {
-      workspaceId, kind: "refund", amountMicro: -amountMicro, key: `refund:${r.id}`, refType: "payment", refId: p.id, memo: "Refund of unused credit", createdBy: by,
+      workspaceId, kind: "refund", amountMicro: -part, key: `refund:${refundId}`, refType: "payment", refId: p.id, createdBy: by,
+      memo: `Refund of unused credit: ${formatUsd(cash)} to your card, ${formatUsd(part - cash)} kept for payment fees`,
     });
-    await sys.updateTable("payments").set({ status: "refunded" }).where("id", "=", p.id).where(sql<boolean>`${amountMicro + toNum(already.r)} >= amount_micro`).execute();
-    remaining -= amountMicro;
-    refunded += amountMicro;
+    if (part >= left) await sys.updateTable("payments").set({ status: "refunded" }).where("id", "=", p.id).execute();
+    remaining -= part;
+    sentToCard += cash;
   }
-  // Only close the request when everything refundable was refunded (e.g. not when no Stripe payment could be found).
-  if (refunded > 0 && remaining < 10_000) {
+  // Close the request only when everything refundable was refunded (e.g. not when no Stripe payment could be found).
+  if (remaining < 10_000) {
     await sys.updateTable("billingAccounts").set({ refundRequestedAt: null, autoTopupEnabled: false, updatedAt: new Date() }).where("workspaceId", "=", workspaceId).execute();
-  } else if (remaining >= 10_000) {
+  } else {
     logger.warn({ workspaceId, remaining }, "refund incomplete: no payment left to refund against");
   }
-  return refunded;
+  return sentToCard;
 }
 
 /** If the service closes: refund every workspace's unused paid credit. */

@@ -63,7 +63,7 @@ export const howMeta: PageMeta = {
   path: "/how-its-run",
   title: "How Glasstrack is run",
   description:
-    "AI is being set up to triage issues and ship small fixes every hour, in priority order, with a human accountable for billing, sign-in, data and security.",
+    "Every hour, AI triages GitHub issues and opens small fixes; a script merges them only if every test passes. Server alerts reach a person within minutes.",
   og: "how-its-run",
 };
 
@@ -83,8 +83,10 @@ export function HowPage(p: { site: SiteCtx }) {
           <p class="eyebrow">How it's run</p>
           <h1>AI does the routine work. A person is accountable.</h1>
           <p class="lede">
-            <span class="status-pill">Being set up</span> The loop below is planned and being built. It is not running yet. Until it is, the
-            same work is done by hand with AI help.
+            The loop below runs every hour as a GitHub Action, so every run is public. The instructions the AI follows are in{" "}
+            <a href={`${GITHUB_URL}/blob/main/.github/ai-maintainer/PLAYBOOK.md`}>the playbook</a>, and the rules that decide what gets merged
+            are in <a href={`${GITHUB_URL}/blob/main/.github/ai-maintainer/gate.sh`}>a short script</a>. It started in October 2026, so it's
+            new: expect rough edges.
           </p>
         </header>
 
@@ -106,10 +108,23 @@ export function HowPage(p: { site: SiteCtx }) {
               </ol>
             </li>
             <li>
-              <strong>Ship small changes once every test passes.</strong> Each release goes out in stages and rolls back automatically if
-              something breaks.
+              <strong>Merge small changes once every test passes.</strong> The AI opens a pull request; it can't merge it. A plain script merges
+              it only if the full test suite passes, it's small, and it touches none of the areas below. Anything else waits for a person.
+              Releasing to glasstrack.dev is still done by a person.
             </li>
           </ol>
+        </section>
+
+        <section class="section prose" aria-labelledby="outage-h">
+          <h2 id="outage-h">When something breaks</h2>
+          <ul>
+            <li>glasstrack.dev is checked every 5 minutes, and the server's health, CPU and disk are watched.</li>
+            <li>
+              When an alert fires, a read-only check of the server runs straight away and the results go to me by message. The AI then takes a
+              first look at the likely cause and, if it's a bug, opens a fix. It can't restart, change or delete anything on the server; that
+              stays with me.
+            </li>
+          </ul>
         </section>
 
         <section class="section grid-2" aria-label="Human review and voting">
@@ -138,8 +153,9 @@ export function HowPage(p: { site: SiteCtx }) {
         <section class="section prose" aria-labelledby="cost-h">
           <h2 id="cost-h">What it costs</h2>
           <p>
-            The AI and tooling bill appears as its own line on the <a href="/finances">finances page</a>, next to the servers, so you can see
-            what this way of working costs and what it saves.
+            The AI coding subscription, $200 a month, appears as its own line on the <a href="/finances">finances page</a>, next to the
+            servers, so you can see what this way of working costs. It's all used for Glasstrack. A flat subscription is currently cheaper
+            than paying per token, and I'll switch if per-token pricing becomes the cheaper option.
           </p>
         </section>
       </div>

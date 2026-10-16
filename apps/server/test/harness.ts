@@ -51,7 +51,7 @@ export async function createHarness(overrides: Record<string, string> = {}) {
         ALTER TABLE pricing_settings DISABLE TRIGGER USER; TRUNCATE pricing_settings RESTART IDENTITY;
         INSERT INTO pricing_settings (signup_credit_usd, server_share_cap_usd, fee_markup, min_topup_usd, max_topup_usd, storage_usd_per_gb_month,
           email_usd_per_thousand, stripe_fee_percent, stripe_fee_fixed_usd, reserve_target_months, reason)
-          VALUES (10, 5, 0.2, 10, 500, 0.023, 0.10, 0.0315, 0.27, 3, 'Test defaults');
+          VALUES (10, 5, 0.2, 10, 500, 0.023, 0.10, 0.0315, 0.27, 6, 'Test defaults');
         ALTER TABLE pricing_settings ENABLE TRIGGER USER;
         TRUNCATE cost_savings, page_views;`).execute(dbs.owner);
       payments.calls.length = 0;

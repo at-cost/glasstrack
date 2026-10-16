@@ -41,7 +41,7 @@ export const DEFAULT_PRICING: PricingSettings = {
   emailUsdPer1000: 0.1,
   stripeFeePercent: 0.0315,
   stripeFeeFixedUsd: 0.27,
-  reserveTargetMonths: 3,
+  reserveTargetMonths: 6,
 };
 
 /** Average month length, for estimates (the nightly charge uses the real month). */

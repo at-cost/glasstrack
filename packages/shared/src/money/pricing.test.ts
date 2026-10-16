@@ -75,10 +75,10 @@ describe("pay-as-you-go pricing", () => {
     expect(usd(topupFeeMicro(S, 500_000_000))).toBeCloseTo(16.02, 6);
   });
 
-  it("recommends a lower cap only once the reserve reaches 3 months of costs, and never a higher one", () => {
+  it("recommends a lower cap only once the reserve reaches 6 months of costs, and never a higher one", () => {
     const base = { settings: S, monthlyCostsMicro: 80_000_000, sharedFixedMonthMicro: 80_000_000, activeWorkspaces: 100 };
-    expect(recommendCap({ ...base, reserveMicro: 239_000_000 })).toMatchObject({ eligible: false, recommendedCapMicro: null, reserveTargetMicro: 240_000_000 });
-    expect(recommendCap({ ...base, reserveMicro: 240_000_000 })).toMatchObject({ eligible: true, recommendedCapMicro: 1_000_000 });
+    expect(recommendCap({ ...base, reserveMicro: 479_000_000 })).toMatchObject({ eligible: false, recommendedCapMicro: null, reserveTargetMicro: 480_000_000 });
+    expect(recommendCap({ ...base, reserveMicro: 480_000_000 })).toMatchObject({ eligible: true, recommendedCapMicro: 1_000_000 });
     expect(recommendCap({ ...base, reserveMicro: 1e12, activeWorkspaces: 2 }).recommendedCapMicro).toBeNull();
     expect(() => assertCapNotIncreased(5, 5.5)).toThrow(/only go down/);
     expect(() => assertCapNotIncreased(5, 4.5)).not.toThrow();

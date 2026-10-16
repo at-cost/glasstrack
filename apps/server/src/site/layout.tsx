@@ -1,4 +1,5 @@
 /** @jsxImportSource hono/jsx */
+import { OPERATOR } from "./operator";
 import { createHash } from "node:crypto";
 import type { Child } from "hono/jsx";
 import { assetUrl, hasAsset } from "./assets";
@@ -167,7 +168,7 @@ function Footer() {
         </nav>
         <p>Glasstrack is open source under the MIT licence.</p>
         <p>
-          Operated by <Placeholder name="OPERATOR_NAME_AND_ADDRESS" />
+          Operated by {OPERATOR.name}, {OPERATOR.place}. <a href={`mailto:${OPERATOR.email}`}>{OPERATOR.email}</a>
         </p>
       </div>
     </footer>

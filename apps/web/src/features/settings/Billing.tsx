@@ -504,10 +504,13 @@ function Refund({ b }: { b: BillingOn }) {
   };
   return (
     <Card title="Refund">
-      <p className="small">Unused credit you paid for can be refunded to your card. The signup credit is not cash, so it isn't refunded.</p>
+      <p className="small">
+        Unused credit you paid for can be refunded to your card, minus the payment fees we were charged for it (see the{" "}
+        <a href="/terms">terms</a>). The signup credit is not cash, so it isn't refunded.
+      </p>
       <dl className="stat-list">
         <div>
-          <dt>Refundable now</dt>
+          <dt>Unused paid credit</dt>
           <dd data-testid="billing-refundable">{formatUsd(b.refundableMicro)}</dd>
         </div>
       </dl>
@@ -534,8 +537,8 @@ function Refund({ b }: { b: BillingOn }) {
           title="Request a refund?"
           message={
             <>
-              We will refund up to {formatUsd(b.refundableMicro)} of unused paid credit to your card and turn off automatic top-up. The
-              workspace keeps running on any credit left until the refund is made.
+              We will refund your unused paid credit ({formatUsd(b.refundableMicro)}) to your card, minus the payment fees we were charged
+              for it, and turn off automatic top-up. The workspace keeps running on any credit left until the refund is made.
             </>
           }
           confirmLabel="Request refund"

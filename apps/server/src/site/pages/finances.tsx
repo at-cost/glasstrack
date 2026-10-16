@@ -81,8 +81,9 @@ export function FinancesPage(p: { finances: PublicFinances; site: SiteCtx }) {
                 </tfoot>
               </table>
               <p class="small muted" style="margin-top:10px">
-                Lines marked "paid by AWS credits" are shown at list price. The AI and tooling line is what it costs to have AI do much of the
-                work (see <a href="/how-its-run">how it's run</a>).
+                Lines marked "paid by AWS credits" are shown at list price. The AI coding subscription ($200 a month) is all used for Glasstrack:
+                it's what lets AI do much of the work (see <a href="/how-its-run">how it's run</a>). A flat subscription is currently cheaper
+                than paying per token; I'll switch if per-token pricing becomes cheaper.
               </p>
             </div>
             <div>

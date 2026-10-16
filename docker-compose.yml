@@ -1,7 +1,15 @@
 # Self-host: cp .env.example .env, run scripts/init-env.sh (fills secrets), then `docker compose up -d`.
 # Optional profiles: `--profile tls` (Caddy with automatic HTTPS), `--profile s3` (MinIO), `--profile mail` (Mailpit).
+# Logs are rotated: at most 5 files of 10 MB per service (see /privacy).
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
+    logging: *logging
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
@@ -18,6 +26,7 @@ services:
       retries: 20
 
   app:
+    logging: *logging
     build: .
     image: glasstrack:latest
     restart: unless-stopped
@@ -35,6 +44,7 @@ services:
         condition: service_healthy
 
   caddy:
+    logging: *logging
     profiles: ["tls"]
     image: caddy:2-alpine
     restart: unless-stopped

@@ -268,7 +268,10 @@ export function HomePage(p: { pricing: PublicPricing; finances: PublicFinances; 
           <details>
             <summary>What if I top up a lot?</summary>
             <div>
-              <p>Your daily charges stay the same. Credit never expires, and unused credit is refundable on request.</p>
+              <p>
+                Your daily charges stay the same. Credit never expires, and unused credit you paid for is refundable on request, minus the
+                payment fees we were charged. See the <a href="/terms">terms</a>.
+              </p>
             </div>
           </details>
           <details>
@@ -301,8 +304,9 @@ export function HomePage(p: { pricing: PublicPricing; finances: PublicFinances; 
             <summary>Who's behind this?</summary>
             <div>
               <p>
-                <span class="placeholder">[WHO_IS_BEHIND_THIS]</span> One person, using AI to do the work of a team, accountable for what
-                ships. <a href="/about">More about Glasstrack</a>.
+                One person in London, using AI to do much of the work of a team. I set the direction, I'm accountable for what ships, and
+                you can always email me at <a href="mailto:transparent-ai-businesses@proton.me">transparent-ai-businesses@proton.me</a>.{" "}
+                <a href="/about">More about Glasstrack</a>.
               </p>
             </div>
           </details>

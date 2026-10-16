@@ -119,6 +119,22 @@ describe("daily charges (pay-as-you-go)", () => {
     expect(b.estimate.monthly.totalMicro).toBe(usdToMicro(6));
   });
 
+  it("workspaces created before billing was on get the signup credit when it starts, and aren't charged for earlier days", async () => {
+    await seedServerCosts(60);
+    const { c } = await setupWorkspace(h, "ann@acme.co", "acme");
+    const id = await wsId(c, "acme");
+    // As if billing was off when it was made: no ledger, no claim, created 10 days ago.
+    await sql`ALTER TABLE credit_ledger DISABLE TRIGGER ledger_append_only; DELETE FROM credit_ledger; ALTER TABLE credit_ledger ENABLE TRIGGER ledger_append_only;
+      DELETE FROM starter_credit_claims; UPDATE workspaces SET created_at = now() - interval '10 days'`.execute(h.deps.dbs.owner);
+    expect(await balanceMicro(h.deps.dbs.system, id)).toBe(0);
+    await runDailyBilling(h.deps);
+    expect(await balanceMicro(h.deps.dbs.system, id)).toBe(usdToMicro(10) - expectedDay(daysAgo(0), { active: 1 }));
+    expect((await billing(c, "acme")).status).toBe("active");
+    // Second run: no second grant.
+    await runDailyBilling(h.deps);
+    expect(await balanceMicro(h.deps.dbs.system, id)).toBe(usdToMicro(10) - expectedDay(daysAgo(0), { active: 1 }));
+  });
+
   it("bills storage and email at cost plus 20%, from the same formula as the calculator", async () => {
     await seedServerCosts(60);
     const { c, team } = await setupWorkspace(h, "ann@acme.co", "acme");
@@ -339,10 +355,12 @@ describe("monthly spending cap and refunds", () => {
     expect(overview.refundRequests).toEqual([expect.objectContaining({ workspaceId: id, refundableMicro: usdToMicro(30) })]);
     expect((await c.post(`/api/v1/admin/refunds/${id}`, {})).status).toBe(403);
     const r = await op.ok("POST", `/api/v1/admin/refunds/${id}`, {});
-    expect(r.refundedMicro).toBe(usdToMicro(30));
-    expect(h.payments.calls.find((x) => x.method === "refund")!.args).toMatchObject({ amountCents: 3000 });
+    // Stripe kept $1.17 on the $30 top-up (2.9% + 30c in this fake); that is not refunded (terms, section 4).
+    expect(r.refundedMicro).toBe(usdToMicro(28.83));
+    expect(h.payments.calls.find((x) => x.method === "refund")!.args).toMatchObject({ amountCents: 2883 });
     const b = await billing(c, "acme");
-    expect(b.balanceMicro).toBe(usdToMicro(10)); // the signup credit stays
+    expect(b.balanceMicro).toBe(usdToMicro(10)); // the signup credit stays; the whole $30 left the balance
+    expect(b.ledger.find((l: { kind: string }) => l.kind === "refund").memo).toBe("Refund of unused credit: $28.83 to your card, $1.17 kept for payment fees");
     expect(b.refundRequestedAt).toBeNull();
     // Nothing more to refund; a second run is a no-op.
     expect((await op.ok("POST", `/api/v1/admin/refunds/${id}`, {})).refundedMicro).toBe(0);
@@ -356,7 +374,8 @@ describe("monthly spending cap and refunds", () => {
     const op = await new Client(h).login("op@glasstrack.dev");
     expect((await op.post("/api/v1/admin/refunds-all", { confirm: "yes" })).status).toBe(400);
     const r = await op.ok("POST", "/api/v1/admin/refunds-all", { confirm: "refund every workspace" });
-    expect(r).toMatchObject({ workspaces: 2, refundedMicro: usdToMicro(70), failed: [] });
+    // $20 minus $0.88 fees, $50 minus $1.75 fees.
+    expect(r).toMatchObject({ workspaces: 2, refundedMicro: usdToMicro(19.12 + 48.25), failed: [] });
   });
 });
 
