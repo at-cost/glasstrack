@@ -10,10 +10,10 @@ const PAGES: [string, string, string][] = [
   ["/about", "Glasstrack is my attempt at that.", "about"],
   ["/how-its-run", "The hourly loop", "how-its-run"],
   ["/self-host", "docker compose up -d", "self-host"],
-  ["/terms", "[TERMS_TEXT]", "legal"],
+  ["/terms", "minus the payment processing fees", "legal"],
   ["/privacy", "does not store IP addresses", "legal"],
-  ["/dpa", "[DPA_TEXT]", "legal"],
-  ["/contact", "[SUPPORT_EMAIL]", "contact"],
+  ["/dpa", "Article 28 of the UK GDPR", "legal"],
+  ["/contact", "transparent-ai-businesses@proton.me", "contact"],
   ["/status", "Database", "status"],
 ];
 
