@@ -11,6 +11,7 @@ import { logger } from "./lib/logger";
 import { RateLimiter } from "./lib/rateLimit";
 import { RealtimeHub } from "./realtime/hub";
 import { createStorage } from "./storage";
+import { pageViews } from "./site/analytics";
 
 const config = loadConfig();
 const dbs = createDatabases(config);
@@ -37,6 +38,7 @@ const deps: Deps = {
 
 if (config.WORKER_MODE !== "off") await jobs.startWorkers(deps);
 meter.start(dbs.system);
+pageViews.start(dbs.system);
 
 let server: ReturnType<typeof serve> | null = null;
 if (config.WORKER_MODE !== "only") {
@@ -51,6 +53,7 @@ async function shutdown(signal: string) {
   server?.close();
   await hub.stop();
   await meter.stop(dbs.system);
+  await pageViews.stop(dbs.system);
   await jobs.stop();
   await dbs.close();
   process.exit(0);

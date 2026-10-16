@@ -1,4 +1,6 @@
 export const paths = {
+  /** The app's entry: picks the last or first workspace. "/" is the public website. */
+  app: () => "/app",
   home: (slug: string) => `/${slug}/my-issues`,
   inbox: (slug: string) => `/${slug}/inbox`,
   myIssues: (slug: string) => `/${slug}/my-issues`,
@@ -12,6 +14,7 @@ export const paths = {
   time: (slug: string) => `/${slug}/time`,
   reports: (slug: string) => `/${slug}/reports`,
   settings: (slug: string, tab?: string) => (tab && tab !== "general" ? `/${slug}/settings/${tab}` : `/${slug}/settings`),
+  /** Server-rendered public page: link with <a href>, not the router. */
   finances: () => "/finances",
   admin: () => "/admin",
 };

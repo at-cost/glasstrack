@@ -6,7 +6,6 @@
 
 export const MICRO = 1_000_000;
 export const GIB = 1024 ** 3;
-const DAYS_PER_YEAR = 365;
 
 export const usdToMicro = (usd: number): number => Math.round(usd * MICRO);
 export const microToCents = (micro: number): number => Math.round(micro / 10_000);
@@ -18,12 +17,6 @@ export function formatUsd(micro: number, opts: { precise?: boolean } = {}): stri
   return `${dollars < 0 ? "-" : ""}$${Math.abs(dollars).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 }
 
-
-/** Storage above the free allowance, billed daily at cost per GB-month. */
-export function storageOverageDaily(storageBytes: number, freeGb: number, ratePerGbMonthMicro: number): number {
-  const excessGb = Math.max(0, storageBytes / GIB - freeGb);
-  return Math.round((excessGb * ratePerGbMonthMicro * 12) / DAYS_PER_YEAR);
-}
 
 export type BillingStatus = "active" | "grace" | "read_only";
 export const GRACE_DAYS = 7;
@@ -72,14 +65,6 @@ export function nextBillingState(s: BillingState, now: Date): BillingTransition 
   };
 }
 
-/** Never let a new price exceed the current one. */
-export function assertPriceNotIncreased(currentMicro: number | null, nextMicro: number): void {
-  if (currentMicro !== null && nextMicro > currentMicro) {
-    throw new Error(`Price can only go down: ${formatUsd(nextMicro)} > ${formatUsd(currentMicro)}`);
-  }
-  if (nextMicro < 0) throw new Error("Price can't be negative");
-}
-
 /**
  * Splits `total` into integer parts proportional to `weights`, assigning the
  * rounding remainder by largest fractional part so the parts sum exactly to
@@ -97,97 +82,6 @@ export function distribute(total: number, weights: number[]): number[] {
   const order = raw.map((r, i) => ({ i, frac: r - Math.floor(r) })).sort((a, b) => b.frac - a.frac || a.i - b.i);
   for (let k = 0; rest > 0; k = (k + 1) % order.length, rest--) parts[order[k]!.i]! += 1;
   return parts;
-}
-
-export interface WorkspaceUsage {
-  id: string;
-  activeMembers: number;
-  storageBytes: number;
-  emails: number;
-  paymentFeesMicro: number;
-}
-
-export interface AllocationInput {
-  /** Every cost for the period except payment fees (infrastructure, tools, domain...). */
-  operatingCostsMicro: number;
-  storageRatePerGbDayMicro: number;
-  emailRateMicro: number;
-  workspaces: WorkspaceUsage[];
-}
-
-export interface WorkspaceCost {
-  id: string;
-  sharedMicro: number;
-  storageMicro: number;
-  emailMicro: number;
-  feesMicro: number;
-  totalMicro: number;
-}
-
-/**
- * workspace_cost = shared × (its active members / all active members)
- *                + storage_GB × storage_rate + emails × email_rate + its payment fees
- *
- * Storage and email are part of the operating bill, so they are carved out of
- * it first: shared = operating − direct storage − direct email. If direct
- * usage would exceed the bill, it is scaled down so nothing is double counted.
- * Sum of totals always equals operating costs + payment fees, exactly.
- */
-export function allocateCosts(input: AllocationInput): WorkspaceCost[] {
-  const ws = input.workspaces;
-  if (ws.length === 0) return [];
-  let storage = ws.map((w) => Math.round((w.storageBytes / GIB) * input.storageRatePerGbDayMicro));
-  let email = ws.map((w) => Math.round(w.emails * input.emailRateMicro));
-  const direct = storage.reduce((a, b) => a + b, 0) + email.reduce((a, b) => a + b, 0);
-  if (direct > input.operatingCostsMicro) {
-    const scaled = distribute(input.operatingCostsMicro, [...storage, ...email]);
-    storage = scaled.slice(0, ws.length);
-    email = scaled.slice(ws.length);
-  }
-  const shared = input.operatingCostsMicro - storage.reduce((a, b) => a + b, 0) - email.reduce((a, b) => a + b, 0);
-  const sharedParts = distribute(shared, ws.map((w) => w.activeMembers));
-  return ws.map((w, i) => {
-    const parts = { sharedMicro: sharedParts[i]!, storageMicro: storage[i]!, emailMicro: email[i]!, feesMicro: w.paymentFeesMicro };
-    return { id: w.id, ...parts, totalMicro: parts.sharedMicro + parts.storageMicro + parts.emailMicro + parts.feesMicro };
-  });
-}
-
-export const MARGIN_BUILDING_RESERVE = 0.1;
-export const MARGIN_RESERVE_FULL = 0.02;
-export const RESERVE_TARGET_MONTHS = 6;
-
-export interface PriceRecommendation {
-  marginBp: number;
-  reserveTargetMicro: number;
-  recommendedMonthlyMicro: number | null;
-  /** True when the recommendation is below the current price. */
-  canLower: boolean;
-}
-
-/**
- * recommended = (monthly costs ÷ paying workspaces) × (1 + margin)
- * margin = 10% until the reserve covers 6 months of costs, then 2%.
- * Rounded up to the next cent so the price always covers cost.
- */
-export function recommendPrice(p: {
-  monthlyCostsMicro: number;
-  payingWorkspaces: number;
-  reserveMicro: number;
-  currentPriceMicro: number;
-}): PriceRecommendation {
-  const reserveTargetMicro = RESERVE_TARGET_MONTHS * p.monthlyCostsMicro;
-  const margin = p.reserveMicro >= reserveTargetMicro && p.monthlyCostsMicro > 0 ? MARGIN_RESERVE_FULL : MARGIN_BUILDING_RESERVE;
-  if (p.payingWorkspaces <= 0) {
-    return { marginBp: Math.round(margin * 10_000), reserveTargetMicro, recommendedMonthlyMicro: null, canLower: false };
-  }
-  const raw = (p.monthlyCostsMicro / p.payingWorkspaces) * (1 + margin);
-  const recommended = Math.ceil(raw / 10_000) * 10_000;
-  return {
-    marginBp: Math.round(margin * 10_000),
-    reserveTargetMicro,
-    recommendedMonthlyMicro: recommended,
-    canLower: recommended < p.currentPriceMicro,
-  };
 }
 
 /**

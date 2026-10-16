@@ -39,6 +39,8 @@ import { workspaceRootRoutes, workspaceRoutes } from "./modules/workspaces";
 import { workspaceTx } from "./modules/workspaceTx";
 import { realtimeRoutes } from "./realtime/routes";
 import { fileRoutes } from "./storage/routes";
+import { isSitePath, siteRoutes } from "./site";
+import { THEME_BOOT_HASH } from "./site/layout";
 
 export function createApp(deps: Deps) {
   const app = new Hono<AppEnv>();
@@ -68,10 +70,10 @@ export function createApp(deps: Deps) {
     }
   });
 
-  const headers = secureHeaders({
+  const csp = (scriptSrc: string[]) => secureHeaders({
       contentSecurityPolicy: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
+        scriptSrc,
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:", "https:"],
         connectSrc: ["'self'", "https:"],
@@ -81,8 +83,14 @@ export function createApp(deps: Deps) {
       },
       crossOriginEmbedderPolicy: false,
   });
+  const headers = csp(["'self'"]);
+  // Public site pages run one tiny inline script (the saved theme, before first paint), allowed by its hash.
+  const siteHeaders = csp(["'self'", THEME_BOOT_HASH]);
   // File downloads set their own stricter sandbox policy.
-  app.use("*", (c, next) => (c.req.path.startsWith("/api/v1/files/") ? next() : headers(c, next)));
+  app.use("*", (c, next) => {
+    if (c.req.path.startsWith("/api/v1/files/")) return next();
+    return isSitePath(c.req.path) ? siteHeaders(c, next) : headers(c, next);
+  });
 
   const api = new Hono<AppEnv>();
   // Origin check on every state-changing request (CSRF). Cookies are SameSite=Lax too.
@@ -149,6 +157,9 @@ export function createApp(deps: Deps) {
   api.route("/w/:slug", ws);
   api.all("*", (c) => c.json({ error: { code: "not_found", message: "Not found" } }, 404));
   app.route("/api/v1", api);
+
+  // The public website (server-rendered), before the SPA so it owns / and the other public paths.
+  app.route("/", siteRoutes);
 
   if (deps.config.WEB_DIST_DIR) {
     const root = deps.config.WEB_DIST_DIR;

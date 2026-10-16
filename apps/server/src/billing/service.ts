@@ -163,8 +163,10 @@ export async function runDailyBilling(deps: Deps, now = new Date()): Promise<{ w
     .execute();
   const inputsByDay = new Map<string, Awaited<ReturnType<typeof dayInputs>>>();
   const inputsFor = async (day: string) => {
-    let v = inputsByDay.get(day);
-    if (!v) inputsByDay.set(day, (v = await dayInputs(deps, day)));
+    const cached = inputsByDay.get(day);
+    if (cached) return cached;
+    const v = await dayInputs(deps, day);
+    inputsByDay.set(day, v);
     return v;
   };
   let charged = 0;

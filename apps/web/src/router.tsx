@@ -1,9 +1,9 @@
+import { useEffect } from "react";
 import { createRootRoute, createRoute, createRouter, Link, Outlet } from "@tanstack/react-router";
 import { Toaster } from "./components/Feedback";
 import { IndexPage, InvitePage, LoginPage, NewWorkspacePage, VerifyPage } from "./features/auth/pages";
 import { AdminPage } from "./features/admin/AdminPage";
 import { CyclesPage } from "./features/cycles/CyclesPage";
-import { FinancesPage } from "./features/finances/FinancesPage";
 import { PublicFormPage } from "./features/forms/PublicFormPage";
 import { InboxPage } from "./features/inbox/InboxPage";
 import { IssueDetailPage } from "./features/issue/IssueDetail";
@@ -23,15 +23,26 @@ function Root() {
   );
 }
 
+/** Pages the server renders (the public website). A client-side link to one needs a full page load. */
+const SERVER_PAGES = /^\/(|pricing|finances|about|how-its-run|self-host|terms|privacy|dpa|contact|status)$/;
+
 function NotFound() {
+  const serverPage = SERVER_PAGES.test(window.location.pathname);
+  useEffect(() => {
+    if (serverPage) window.location.replace(window.location.pathname + window.location.search + window.location.hash);
+  }, [serverPage]);
+  if (serverPage) return null;
   return (
     <main className="auth-page">
       <div className="auth-card">
         <h1 className="auth-title">Page not found</h1>
         <p className="muted center">The link may be old or mistyped.</p>
-        <Link to="/" className="btn btn-primary btn-block">
-          Go home
+        <Link to="/app" className="btn btn-primary btn-block">
+          Go to your workspaces
         </Link>
+        <a href="/" className="btn btn-block">
+          Glasstrack home
+        </a>
       </div>
     </main>
   );
@@ -39,17 +50,28 @@ function NotFound() {
 
 const rootRoute = createRootRoute({ component: Root, notFoundComponent: NotFound });
 
-const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: IndexPage });
+// "/" is the server-rendered public website; the app starts at /app.
+const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/app", component: IndexPage });
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: "/login", component: LoginPage });
 const verifyRoute = createRoute({ getParentRoute: () => rootRoute, path: "/auth/verify", component: VerifyPage });
 const inviteRoute = createRoute({ getParentRoute: () => rootRoute, path: "/invite/$token", component: InvitePage });
-const financesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/finances", component: FinancesPage });
 // Public request forms: no sign-in and no app shell.
 const formRoute = createRoute({ getParentRoute: () => rootRoute, path: "/forms/$token", component: PublicFormPage });
 const adminRoute = createRoute({ getParentRoute: () => rootRoute, path: "/admin", component: AdminPage });
 const newWsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/new", component: NewWorkspacePage });
 
-const wsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/$slug", component: WorkspaceLayout });
+const wsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/$slug",
+  component: WorkspaceLayout,
+  // A client-side link to a public page (/finances, /pricing...) must load it from the server.
+  beforeLoad: ({ location }) => {
+    if (SERVER_PAGES.test(location.pathname)) {
+      window.location.assign(location.href);
+      return new Promise<never>(() => {});
+    }
+  },
+});
 const child = (path: string, component: () => React.ReactNode) => createRoute({ getParentRoute: () => wsRoute, path, component });
 
 const routeTree = rootRoute.addChildren([
@@ -58,7 +80,6 @@ const routeTree = rootRoute.addChildren([
   verifyRoute,
   inviteRoute,
   newWsRoute,
-  financesRoute,
   formRoute,
   adminRoute,
   wsRoute.addChildren([

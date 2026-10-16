@@ -24,6 +24,8 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgres://glasstrack:${POSTGRES_PASSWORD}@postgres:5432/glasstrack}
+      # Shown on /status. deploy/deploy.sh sets it to the deployed commit.
+      GIT_COMMIT: ${GIT_COMMIT:-}
     ports:
       - "${HOST_PORT:-3000}:3000"
     volumes:

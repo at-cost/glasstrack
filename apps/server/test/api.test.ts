@@ -40,7 +40,7 @@ describe("auth", () => {
     const c = new Client(h);
     await c.post("/api/v1/auth/magic-link", { email: "a@b.co", redirectTo: "//evil.example" });
     const token = /token=([\w-]+)/.exec(h.mailer.last("a@b.co")!.text)![1]!;
-    expect((await c.post("/api/v1/auth/magic-link/verify", { token })).body.redirectTo).toBe("/");
+    expect((await c.post("/api/v1/auth/magic-link/verify", { token })).body.redirectTo).toBe("/app");
   });
 
   it("expired links are rejected", async () => {

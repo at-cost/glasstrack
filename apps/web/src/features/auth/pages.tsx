@@ -9,6 +9,7 @@ function useAutoFocusIn(ref: React.RefObject<HTMLElement | null>) {
     ref.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus();
   }, [ref]);
 }
+import { estimateEmails, monthlyCost, type PricingSettings } from "@glasstrack/shared";
 import { FullPageLoading, Spinner } from "../../components/Feedback";
 import { ApiError, api, errorMessage } from "../../lib/api";
 import { slugify } from "../../lib/format";
@@ -47,7 +48,7 @@ const OAUTH_ERRORS: Record<string, string> = {
 };
 
 const ssoStart = (slug: string, redirectTo: string) =>
-  `/api/v1/auth/sso/${encodeURIComponent(slug)}/start?redirectTo=${encodeURIComponent(redirectTo === "/" ? `/${slug}` : redirectTo)}`;
+  `/api/v1/auth/sso/${encodeURIComponent(slug)}/start?redirectTo=${encodeURIComponent(redirectTo === "/" || redirectTo === "/app" ? `/${slug}` : redirectTo)}`;
 
 /** Finds the workspaces that offer SSO for a work email, then hands over to the provider. */
 function SsoLookup({ redirect, onBack }: { redirect: string; onBack: () => void }) {
@@ -122,8 +123,10 @@ function SsoLookup({ redirect, onBack }: { redirect: string; onBack: () => void 
 }
 
 export function LoginPage() {
-  const search = useSearch({ strict: false }) as { redirect?: string; error?: string };
-  const redirect = typeof search.redirect === "string" && search.redirect.startsWith("/") ? search.redirect : "/";
+  const search = useSearch({ strict: false }) as { redirect?: string; error?: string; signup?: string };
+  // "/" is the public website, so signing in from it lands in the app instead.
+  const redirect = typeof search.redirect === "string" && search.redirect.startsWith("/") && search.redirect !== "/" ? search.redirect : "/app";
+  const signup = search.signup !== undefined && search.signup !== "0";
   const providers = useQuery({ queryKey: ["providers"], queryFn: api.providers, staleTime: Infinity });
   const me = useMe();
   const navigate = useNavigate();
@@ -179,7 +182,8 @@ export function LoginPage() {
     );
   }
   return (
-    <AuthCard title="Sign in">
+    <AuthCard title={signup ? "Create your account" : "Sign in"}>
+      {signup && <p className="muted center">Enter your email and we'll send you a link to get started.</p>}
       {error && (
         <p className="form-error" role="alert">
           {error}
@@ -218,7 +222,7 @@ export function LoginPage() {
         </label>
         <button type="submit" className="btn btn-primary btn-block" disabled={busy || !email.trim()}>
           {busy ? <Spinner label="Sending" /> : <Mail size={15} aria-hidden="true" />}
-          Email me a sign-in link
+          {signup ? "Email me a sign-up link" : "Email me a sign-in link"}
         </button>
       </form>
       <button
@@ -254,7 +258,7 @@ export function VerifyPage() {
       .verifyMagicLink(token)
       .then(async (r) => {
         await qc.invalidateQueries({ queryKey: keys.me });
-        navigate({ to: r.redirectTo || "/", replace: true });
+        navigate({ to: r.redirectTo && r.redirectTo !== "/" ? r.redirectTo : "/app", replace: true });
       })
       .catch((e) => setError(errorMessage(e)));
   }, [token, navigate, qc]);
@@ -294,7 +298,7 @@ export function InvitePage() {
     return (
       <AuthCard title="Invite not found">
         <p className="muted center">{errorMessage(preview.error)}</p>
-        <Link to="/" className="btn btn-block">
+        <Link to="/app" className="btn btn-block">
           Go to your workspaces
         </Link>
       </AuthCard>
@@ -362,6 +366,32 @@ export function IndexPage() {
   return <FullPageLoading />;
 }
 
+const usdWhole = (micro: number) => `$${Math.round(micro / 1_000_000).toLocaleString("en-US")}`;
+
+/**
+ * Only on servers with billing on: the new workspace's credit and what a typical
+ * team (20 people, 5 GB, the default emails) pays, from the shared pricing module.
+ */
+async function creditWelcome(slug: string): Promise<{ balanceMicro: number; typicalMicro: number } | null> {
+  try {
+    const billing = await api.ws(slug).billing();
+    if (!billing.enabled || billing.balanceMicro <= 0) return null;
+    const res = await fetch("/api/v1/public/pricing", { headers: { accept: "application/json" } });
+    if (!res.ok) return null;
+    const p = (await res.json()) as { settings: PricingSettings; sharedFixedMonthMicro: number; activeWorkspaces: number };
+    const typical = monthlyCost({
+      settings: p.settings,
+      sharedFixedMonthMicro: p.sharedFixedMonthMicro,
+      activeWorkspaces: p.activeWorkspaces,
+      storageGb: 5,
+      emailsPerMonth: estimateEmails(20),
+    });
+    return { balanceMicro: billing.balanceMicro, typicalMicro: typical.totalMicro };
+  } catch {
+    return null;
+  }
+}
+
 export function NewWorkspacePage() {
   const me = useMe();
   const navigate = useNavigate();
@@ -369,6 +399,7 @@ export function NewWorkspacePage() {
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
+  const [welcome, setWelcome] = useState<{ slug: string; balanceMicro: number; typicalMicro: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -390,13 +421,30 @@ export function NewWorkspacePage() {
     try {
       const ws = await api.createWorkspace(name.trim(), effectiveSlug);
       await qc.invalidateQueries({ queryKey: keys.me });
-      navigate({ to: paths.home(ws.slug), replace: true });
+      const credit = await creditWelcome(ws.slug);
+      if (credit) setWelcome({ slug: ws.slug, ...credit });
+      else navigate({ to: paths.home(ws.slug), replace: true });
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);
     }
   };
   if (me.isPending) return <FullPageLoading />;
+  if (welcome) {
+    return (
+      <AuthCard title="Your workspace is ready">
+        <p className="center">
+          You have {usdWhole(welcome.balanceMicro)} of credit. A typical team uses about {usdWhole(welcome.typicalMicro)} a month.
+        </p>
+        <p className="muted center small">
+          <a href="/pricing">How the price is worked out</a>
+        </p>
+        <Link to={paths.home(welcome.slug)} className="btn btn-primary btn-block" data-autofocus>
+          Open workspace
+        </Link>
+      </AuthCard>
+    );
+  }
   const hasWorkspaces = (me.data?.workspaces.length ?? 0) > 0;
   return (
     <AuthCard title={hasWorkspaces ? "New workspace" : "Create your workspace"}>
@@ -453,7 +501,7 @@ export function NewWorkspacePage() {
           Create workspace
         </button>
         {hasWorkspaces && (
-          <Link to="/" className="btn btn-ghost btn-block">
+          <Link to="/app" className="btn btn-ghost btn-block">
             Cancel
           </Link>
         )}

@@ -13,9 +13,12 @@ import { createSession, destroySession } from "./session";
 
 const MAGIC_LINK_MINUTES = 15;
 
-/** Only same-site relative paths, to avoid open redirects. */
+/** Where people land after signing in: the app, not the public website at "/". */
+export const APP_HOME = "/app";
+
+/** Only same-site relative paths, to avoid open redirects. "/" is the public website, so it becomes the app. */
 export function safeRedirect(r: string | null | undefined): string {
-  if (!r || !r.startsWith("/") || r.startsWith("//") || r.startsWith("/\\")) return "/";
+  if (!r || r === "/" || !r.startsWith("/") || r.startsWith("//") || r.startsWith("/\\")) return APP_HOME;
   return r;
 }
 

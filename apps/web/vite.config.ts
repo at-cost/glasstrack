@@ -7,6 +7,11 @@ export default defineConfig({
     port: 5180,
     strictPort: true,
     proxy: {
+      // The public website is rendered by the API server.
+      "^/(pricing|finances|finances\\.csv|about|how-its-run|self-host|terms|privacy|dpa|contact|status|sitemap\\.xml|robots\\.txt|og/.*|site/.*)?(\\?.*)?$": {
+        target: "http://localhost:3100",
+        changeOrigin: false,
+      },
       "/api": {
         target: "http://localhost:3100",
         // Keep the Origin header as sent by the browser so the API CSRF check passes.

@@ -37,6 +37,8 @@ pnpm test            # uses TEST_DATABASE_URL or postgres://localhost:5432/glass
 pnpm test:e2e        # Playwright; builds nothing, run `pnpm build` first
 ```
 
+The public website (/, /pricing, /finances and the other public pages) is rendered by the server with Hono JSX in `apps/server/src/site`. Its browser scripts build with `pnpm --filter @glasstrack/server build:site` (part of `pnpm build`). To refresh the product screenshots and Open Graph images after UI changes, run `pnpm build && pnpm site:screenshots` and commit the files it writes to `apps/server/src/site/public`.
+
 The integration tests drop and recreate the test database schema, run every migration up, down and up again, and check tenant isolation for every tenant table.
 
 ## Database changes

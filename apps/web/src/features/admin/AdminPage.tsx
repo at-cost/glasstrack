@@ -26,15 +26,15 @@ export function AdminPage() {
   return (
     <div className="public-page">
       <header className="public-bar">
-        <Link to="/" className="public-brand">
+        <a href="/" className="public-brand">
           <img src="/favicon.svg" alt="" width={22} height={22} />
           Glasstrack
-        </Link>
+        </a>
         <nav className="row" aria-label="Admin">
-          <Link to={paths.finances()} className="btn btn-sm btn-ghost">
+          <a href="/finances" className="btn btn-sm btn-ghost">
             Public page
-          </Link>
-          <Link to="/" className="btn btn-sm">
+          </a>
+          <Link to="/app" className="btn btn-sm">
             Back to app
           </Link>
         </nav>
@@ -120,9 +120,9 @@ function Snapshot({ o }: { o: AdminOverview }) {
         </>
       }
       actions={
-        <Link to={paths.finances()} className="btn btn-sm btn-ghost">
+        <a href="/finances" className="btn btn-sm btn-ghost">
           Public finances
-        </Link>
+        </a>
       }
     >
       {f.example ? (

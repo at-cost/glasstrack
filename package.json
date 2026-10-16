@@ -16,7 +16,8 @@
     "test": "pnpm -r test",
     "test:e2e": "playwright test",
     "migrate": "pnpm --filter @glasstrack/server migrate",
-    "seed": "pnpm --filter @glasstrack/server seed"
+    "seed": "pnpm --filter @glasstrack/server seed",
+    "site:screenshots": "node scripts/site-screenshots.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",

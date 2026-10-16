@@ -15,6 +15,7 @@ RUN pnpm --filter @glasstrack/web build && pnpm --filter @glasstrack/server buil
 FROM node:22-alpine
 RUN apk add --no-cache postgresql17-client tini
 WORKDIR /app
+# dist/ includes dist/site/public: the public website's scripts, font, screenshots and OG images.
 COPY --from=build /src/apps/server/dist ./dist
 COPY --from=build /src/apps/web/dist ./web
 RUN mkdir -p /data/files && chown -R node:node /data

@@ -237,7 +237,7 @@ function Members() {
       await api.ws(slug).removeMember(m.userId);
       if (m.userId === me.id) {
         await qc.invalidateQueries({ queryKey: keys.me });
-        navigate({ to: "/" });
+        navigate({ to: "/app" });
         return;
       }
       await qc.invalidateQueries({ queryKey: keys.members(slug) });
@@ -1337,7 +1337,7 @@ function Data() {
       await api.ws(slug).remove(confirmText);
       await qc.invalidateQueries({ queryKey: keys.me });
       toast("Workspace deleted", "success");
-      navigate({ to: "/" });
+      navigate({ to: "/app" });
     } catch (e) {
       toastError(errorMessage(e));
       setDeleting(false);

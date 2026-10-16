@@ -94,7 +94,7 @@ export function WorkspaceLayout() {
         <div className="auth-card">
           <h1 className="auth-title">{notFound ? "Workspace not found" : "Could not load"}</h1>
           <p className="muted center">{notFound ? "It may not exist, or you are not a member." : errorMessage(ws.error)}</p>
-          <Link to="/" className="btn btn-primary btn-block" onClick={() => lastWorkspace() === slug && rememberWorkspace("")}>
+          <Link to="/app" className="btn btn-primary btn-block" onClick={() => lastWorkspace() === slug && rememberWorkspace("")}>
             Go to your workspaces
           </Link>
         </div>
@@ -123,7 +123,7 @@ function SsoRequiredPage({ slug, redirectTo }: { slug: string; redirectTo: strin
         <a href={href} className="btn btn-primary btn-block">
           Sign in with SSO
         </a>
-        <Link to="/" className="btn btn-block">
+        <Link to="/app" className="btn btn-block">
           Go to your workspaces
         </Link>
       </div>
@@ -397,9 +397,13 @@ function Sidebar() {
           Settings
         </NavLink>
         {billing.data?.enabled && (
-          <NavLink to={paths.finances()} icon={<Landmark size={16} />}>
-            Public finances
-          </NavLink>
+          // A server-rendered page, so a full page load rather than a client-side route.
+          <a href={paths.finances()} className="nav-link">
+            <span className="nav-icon" aria-hidden="true">
+              <Landmark size={16} />
+            </span>
+            <span className="nav-text">Public finances</span>
+          </a>
         )}
         <div className="sidebar-bottom-row">
           <UserMenu name={me.name} email={me.email} />

@@ -33,6 +33,8 @@ export default defineConfig({
       STORAGE_LOCAL_DIR: "test-results/e2e-files",
       SMTP_URL: `file://${process.cwd()}/test-results/e2e-mail.jsonl`,
       LOG_LEVEL: "warn",
+      // Test-only sign-in (refused in production), used by e2e/site.spec.ts.
+      E2E_TEST_LOGIN: "true",
     },
   },
 });

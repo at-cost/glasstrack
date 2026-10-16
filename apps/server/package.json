@@ -5,13 +5,14 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
-    "build": "tsup",
+    "dev": "tsup --config tsup.site.config.ts && tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "build": "tsup && tsup --config tsup.site.config.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "migrate": "tsx --env-file-if-exists=../../.env src/cli/migrate.ts",
-    "seed": "tsx --env-file-if-exists=../../.env src/cli/seed.ts"
+    "seed": "tsx --env-file-if-exists=../../.env src/cli/seed.ts",
+    "build:site": "tsup --config tsup.site.config.ts"
   },
   "devDependencies": {
     "@types/nodemailer": "^8.0.2",

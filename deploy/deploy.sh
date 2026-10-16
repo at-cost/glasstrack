@@ -12,6 +12,6 @@ REV=$(git rev-parse --short HEAD)
 echo "Deploying $REV to $DEPLOY_HOST:$DIR"
 git archive --format=tar HEAD | ssh $KEY_OPT "$DEPLOY_HOST" "mkdir -p $DIR/src && cd $DIR/src && find . -mindepth 1 -maxdepth 1 ! -name .env ! -name tls -exec rm -rf {} + && tar -xf - && echo $REV > REVISION"
 ssh $KEY_OPT "$DEPLOY_HOST" "cd $DIR/src && ln -sfn $DIR/.env .env && ln -sfn $DIR/tls tls && \
-  docker compose -f docker-compose.yml -f deploy/docker-compose.cloudflare.yml up -d --build --wait --wait-timeout 300 && \
+  GIT_COMMIT=$REV docker compose -f docker-compose.yml -f deploy/docker-compose.cloudflare.yml up -d --build --wait --wait-timeout 300 && \
   docker image prune -f >/dev/null && docker compose -f docker-compose.yml -f deploy/docker-compose.cloudflare.yml ps --format '{{.Service}}: {{.Status}}'"
 echo "Deployed $REV"

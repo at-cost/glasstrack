@@ -65,6 +65,10 @@ const schema = z.object({
   WEBHOOK_ALLOW_PRIVATE: bool.default(false),
   /** Allow SSO providers on private networks (self-hosted Keycloak/Authentik on a LAN). Off for hosted. */
   SSO_ALLOW_PRIVATE: bool.default(false),
+  /** Optional external status page; /status links to it when set. */
+  STATUS_PAGE_URL: z.string().default(""),
+  /** The deployed commit, shown on /status (deploy/deploy.sh sets it). */
+  GIT_COMMIT: z.string().default(""),
 });
 
 export type Config = z.infer<typeof schema> & {

@@ -227,7 +227,7 @@ function Costs({ b }: { b: BillingOn }) {
       </div>
       <p className="small">
         The monthly figure is an estimate from today's usage. Each day is charged at the month's amount divided by the days in the month.{" "}
-        <a href="/pricing">How the price is worked out</a> · <Link to={paths.finances()}>Our costs</Link>
+        <a href="/pricing">How the price is worked out</a> · <a href="/finances">Our costs</a>
       </p>
     </Card>
   );

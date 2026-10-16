@@ -12,7 +12,7 @@ import { logger } from "../lib/logger";
 import { open, seal } from "../lib/secretBox";
 import { assertPublicUrl } from "../lib/ssrf";
 import { audit, auditSystem, requestIp } from "../modules/audit";
-import { findOrCreateUser, safeRedirect } from "./routes";
+import { APP_HOME, findOrCreateUser, safeRedirect } from "./routes";
 import { createSession } from "./session";
 
 const PURPOSE = "sso-client-secret";
@@ -157,7 +157,7 @@ export const ssoAuthRoutes = new Hono<AppEnv>()
       }
       await createSession(c, userId, { authMethod: "sso", ssoWorkspaceId: wsId });
       await auditSystem(deps.dbs.system, { workspaceId: wsId, actorId: userId, actorLabel: email, action: "sso.login", ip: requestIp(c) });
-      return c.redirect(redirectTo === "/" ? `/${ws.slug}` : redirectTo);
+      return c.redirect(redirectTo === "/" || redirectTo === APP_HOME ? `/${ws.slug}` : redirectTo);
     } catch (err) {
       logger.warn({ err: String(err), workspaceId: wsId }, "sso callback failed");
       return fail("sso_failed");
