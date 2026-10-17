@@ -63,7 +63,7 @@ export const howMeta: PageMeta = {
   path: "/how-its-run",
   title: "How Glasstrack is run",
   description:
-    "Every hour, AI triages GitHub issues and opens small fixes; a script merges them only if every test passes. Server alerts reach a person within minutes.",
+    "Every few hours, AI triages GitHub issues and opens small fixes; a script merges them only if every test passes. Server alerts reach a person within minutes.",
   og: "how-its-run",
 };
 
@@ -83,15 +83,16 @@ export function HowPage(p: { site: SiteCtx }) {
           <p class="eyebrow">How it's run</p>
           <h1>AI does the routine work. A person is accountable.</h1>
           <p class="lede">
-            The loop below runs every hour as a GitHub Action, so every run is public. The instructions the AI follows are in{" "}
-            <a href={`${GITHUB_URL}/blob/main/.github/ai-maintainer/PLAYBOOK.md`}>the playbook</a>, and the rules that decide what gets merged
-            are in <a href={`${GITHUB_URL}/blob/main/.github/ai-maintainer/gate.sh`}>a short script</a>. It started in October 2026, so it's
-            new: expect rough edges.
+            The loop below runs every few hours. The instructions the AI follows are in{" "}
+            <a href={`${GITHUB_URL}/blob/main/.github/ai-maintainer/PLAYBOOK.md`}>the playbook</a>. Every fix it proposes is a public pull
+            request, and whether it gets merged is decided in public by{" "}
+            <a href={`${GITHUB_URL}/blob/main/.github/ai-maintainer/gate.sh`}>a short script</a>, not by the AI. It started in October 2026,
+            so it's new: expect rough edges.
           </p>
         </header>
 
         <section class="section" aria-labelledby="loop-h">
-          <h2 id="loop-h">The hourly loop</h2>
+          <h2 id="loop-h">The loop</h2>
           <ol class="points prose">
             <li>
               <strong>Triage every new GitHub issue.</strong> Add labels, close duplicates with a link to the original, and ask for steps to
@@ -121,7 +122,7 @@ export function HowPage(p: { site: SiteCtx }) {
             <li>glasstrack.dev is checked every 5 minutes, and the server's health, CPU and disk are watched.</li>
             <li>
               When an alert fires, a read-only check of the server runs straight away and the results go to me by message. The AI then takes a
-              first look at the likely cause and, if it's a bug, opens a fix. It can't restart, change or delete anything on the server; that
+              look at the likely cause on its next run and, if it's a bug, opens a fix. It can't restart, change or delete anything on the server; that
               stays with me.
             </li>
           </ul>

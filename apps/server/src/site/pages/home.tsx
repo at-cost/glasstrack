@@ -210,8 +210,8 @@ export function HomePage(p: { pricing: PublicPricing; finances: PublicFinances; 
           </div>
           <ol class="points">
             <li>
-              <strong>AI handles routine work.</strong> It already helps build and fix Glasstrack. An hourly loop to triage reports and ship
-              small fixes is being set up; it isn't running yet.
+              <strong>AI handles routine work.</strong> It already helps build and fix Glasstrack. A loop that triages reports and opens
+              small fixes every few hours is being set up; it isn't running yet.
             </li>
             <li>
               <strong>Savings are passed on.</strong> Lower running costs lower the price. The server share cap only goes down.

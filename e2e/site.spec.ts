@@ -8,7 +8,7 @@ const PAGES: [string, string, string][] = [
   ["/pricing", "What would my team pay?", "pricing"],
   ["/finances", "Covered by the founder", "finances"],
   ["/about", "Glasstrack is my attempt at that.", "about"],
-  ["/how-its-run", "The hourly loop", "how-its-run"],
+  ["/how-its-run", "Merge small changes once every test passes", "how-its-run"],
   ["/self-host", "docker compose up -d", "self-host"],
   ["/terms", "minus the payment processing fees", "legal"],
   ["/privacy", "does not store IP addresses", "legal"],

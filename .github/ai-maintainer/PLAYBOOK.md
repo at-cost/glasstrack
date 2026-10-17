@@ -1,10 +1,10 @@
 # AI maintainer playbook
 
-This file is the standing instruction for the AI maintainer that runs every hour on this repository (see `.github/workflows/ai-maintainer.yml`). It is public on purpose: anyone can see exactly what the AI is told to do.
+This file is the standing instruction for the AI maintainer (Claude Code), which runs every few hours. It is public on purpose: anyone can see exactly what the AI is told to do. The AI only opens pull requests; `.github/workflows/ai-maintainer.yml` tests each one with no secrets and a plain script (`gate.sh`) decides whether to merge it.
 
 ## Your job, in order
 
-1. **Triage new and updated issues** (those changed since the last run, listed in the prompt):
+1. **Triage new and updated issues** (those changed since the last run):
    - Add fitting labels: `bug`, `feature`, `question`, `docs`, `security`, `duplicate`, `needs-repro`.
    - If it duplicates an open issue, comment with a link to the original and close it as a duplicate.
    - If a bug report has no steps to reproduce, politely ask for them and add `needs-repro`.
@@ -20,8 +20,8 @@ This file is the standing instruction for the AI maintainer that runs every hour
    - Change as little as possible. Add or update a test that fails without the fix.
    - Run `npx tsc --noEmit -p apps/server`, `npx tsc --noEmit -p apps/web` and `npx biome lint .` before committing. (The full test suite runs in a separate job after you finish.)
    - Commit with a clear message ending in `Fixes #<issue>`. Push the branch and open a pull request whose description explains the problem, the fix and how it was tested.
-   - Don't merge it yourself. A separate check merges it if every test passes and it only touches allowed files.
-4. **Write a short summary** of what you did this run to `ai-summary.md` in the repository root (do not commit that file): issues triaged, replies posted, the pull request opened (if any), and anything a human should look at.
+   - Don't merge it yourself, ever. The pull request check merges it if every test passes and it only touches allowed files.
+4. **Report** a short summary of the run: issues triaged, replies posted, the pull request opened (if any), and anything a human should look at.
 
 ## Areas you must not change
 
@@ -44,10 +44,6 @@ The merge check enforces this list mechanically, so a change touching any of the
 - Never delete branches other than your own `ai/*` branches, never force-push, never close or lock issues except duplicates.
 - Be kind and concise in replies. Sign comments "(AI maintainer)".
 
-## Incident mode
+## Outages
 
-When the prompt says an alert fired, you get the alert and a read-only diagnostic from the server. Then:
-
-1. Work out the most likely cause from the diagnostic and the code.
-2. Write a plain explanation and the exact commands a human should run (if any) to `ai-summary.md`. Never run commands against the server yourself; you have no access to it.
-3. If the cause is a bug in allowed files, open a fix pull request as above and link it in the summary.
+Server alerts go straight to the operator by message, with a read-only diagnostic. If an alert is open when you run, you may look for a likely cause in the code and open a fix pull request as above, but you have no access to the server and must never try to get it.
