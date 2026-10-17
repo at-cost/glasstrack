@@ -70,7 +70,7 @@ export const howMeta: PageMeta = {
   path: "/how-its-run",
   title: "How Glasstrack is run",
   description:
-    "Every few hours, AI triages GitHub issues and opens small fixes; a script merges them only if every test passes. Server alerts reach a person within minutes.",
+    "Every 4 hours, AI triages GitHub issues and opens small fixes; a script merges them only if every test passes. Server alerts reach a person within minutes.",
   og: "how-its-run",
 };
 
@@ -90,7 +90,7 @@ export function HowPage(p: { site: SiteCtx }) {
           <p class="eyebrow">How it's run</p>
           <h1>AI does the routine work. A person is accountable.</h1>
           <p class="lede">
-            The loop below runs every few hours. The instructions the AI follows are in{" "}
+            The loop below runs every 4 hours. The instructions the AI follows are in{" "}
             <a href={`${GITHUB_URL}/blob/main/.github/ai-maintainer/PLAYBOOK.md`}>the playbook</a>. Every fix it proposes is a public pull
             request, and whether it gets merged is decided in public by{" "}
             <a href={`${GITHUB_URL}/blob/main/.github/ai-maintainer/gate.sh`}>a short script</a>, not by the AI. It started in October 2026,

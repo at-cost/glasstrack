@@ -1,6 +1,6 @@
 # AI maintainer playbook
 
-This file is the standing instruction for the AI maintainer (Claude Code), which runs every few hours. It is public on purpose: anyone can see exactly what the AI is told to do. The AI only opens pull requests; `.github/workflows/ai-maintainer.yml` tests each one with no secrets and a plain script (`gate.sh`) decides whether to merge it.
+This file is the standing instruction for the AI maintainer (Claude Code), which runs every 4 hours. It is public on purpose: anyone can see exactly what the AI is told to do. The AI only opens pull requests; `.github/workflows/ai-maintainer.yml` tests each one with no secrets and a plain script (`gate.sh`) decides whether to merge it.
 
 ## Your job, in order
 
