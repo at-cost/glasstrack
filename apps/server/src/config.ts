@@ -54,6 +54,8 @@ const schema = z.object({
   /** Comma-separated emails allowed into the operator admin (costs, pricing). */
   OPERATOR_EMAILS: z.string().default(""),
   AWS_COST_EXPLORER_ENABLED: bool.default(false),
+  /** Region the hosting runs in; Cost Explorer imports only this region plus AWS's global items. */
+  AWS_COST_REGION: z.string().default("eu-west-2"),
   AWS_ACCESS_KEY_ID: z.string().default(""),
   AWS_SECRET_ACCESS_KEY: z.string().default(""),
   BACKUP_ENABLED: bool.default(false),

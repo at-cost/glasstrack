@@ -215,9 +215,9 @@ describe("AWS Cost Explorer parsing", () => {
       }],
     });
     expect(lines).toEqual([
-      { day: "2026-03-09", service: "Amazon Elastic Compute Cloud - Compute", amountMicro: 1_234_500, category: "infrastructure" },
-      { day: "2026-03-09", service: "Amazon Simple Storage Service", amountMicro: 50_000, category: "storage" },
-      { day: "2026-03-09", service: "Amazon Simple Email Service", amountMicro: 10_000, category: "email" },
+      { day: "2026-03-09", service: "Amazon Elastic Compute Cloud - Compute", amountMicro: 1_234_500, category: "infrastructure", paidByCredits: false },
+      { day: "2026-03-09", service: "Amazon Simple Storage Service", amountMicro: 50_000, category: "storage", paidByCredits: false },
+      { day: "2026-03-09", service: "Amazon Simple Email Service", amountMicro: 10_000, category: "email", paidByCredits: false },
     ]);
   });
 });

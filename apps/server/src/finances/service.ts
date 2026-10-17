@@ -21,6 +21,13 @@ export const CATEGORY_LABELS: Record<string, string> = {
   other: "Other",
 };
 
+/** Public labels for imported AWS lines. */
+const AWS_LABELS: Record<string, string> = {
+  infrastructure: "Servers, disk and network (AWS)",
+  storage: "Backups and file storage (AWS S3)",
+  email: "Email delivery (AWS SES)",
+};
+
 /** Snapshot of active members (anyone active in the last 30 days) and storage per workspace. */
 export async function snapshotUsage(deps: Deps, day: string): Promise<number> {
   const r = await sql`
@@ -37,15 +44,16 @@ export async function snapshotUsage(deps: Deps, day: string): Promise<number> {
 /** Pulls the last few days from Cost Explorer; AWS revises recent days, so they are upserted. */
 export async function importAwsCosts(deps: Deps, today = isoDay(new Date())): Promise<number> {
   if (!deps.config.AWS_COST_EXPLORER_ENABLED) return 0;
-  const lines = await fetchAwsCosts(deps.config, addDays(today, -4), today);
+  // AWS revises recent days for a while, so look back a week.
+  const lines = await fetchAwsCosts(deps.config, addDays(today, -7), today);
   for (const l of lines) {
     await deps.dbs.system
       .insertInto("costEntries")
       .values({
         id: uuid7(), periodStart: l.day, periodEnd: l.day, category: l.category, source: "aws", amountMicro: l.amountMicro,
-        publicLabel: CATEGORY_LABELS[l.category]!, note: l.service, externalKey: `aws:${l.day}:${l.service}`,
+        publicLabel: AWS_LABELS[l.category]!, note: l.service, externalKey: `aws:${l.day}:${l.service}`, paidByCredits: l.paidByCredits,
       })
-      .onConflict((oc) => oc.column("externalKey").doUpdateSet({ amountMicro: l.amountMicro }))
+      .onConflict((oc) => oc.column("externalKey").doUpdateSet({ amountMicro: l.amountMicro, paidByCredits: l.paidByCredits }))
       .execute();
   }
   return lines.length;
