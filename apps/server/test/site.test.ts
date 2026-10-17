@@ -93,6 +93,19 @@ describe("public site", () => {
     expect(api.headers.get("content-security-policy")).not.toContain("sha256-");
   });
 
+  it("compares with Jira (free up to 10 users) and shows live figures on /about", async () => {
+    const { competitorMonthly, COMPETITORS } = await import("../src/site/competitors");
+    const jira = COMPETITORS.find((c) => c.vendor === "Jira")!;
+    expect(competitorMonthly(jira, 10)).toBe(0);
+    expect(competitorMonthly(jira, 20)).toBeCloseTo(169.6, 6);
+    const pricing = await (await h.app.request("/pricing")).text();
+    expect(pricing).toContain("Jira Standard");
+    expect(pricing).toMatch(/data-competitor="Jira">\s*\$170/);
+    const about = await (await h.app.request("/about")).text();
+    // Example pricing ($60 of servers, 1 workspace): 20 people about $6.40, 200 people about $8.50.
+    expect(about).toContain("about $6.40 a month and a 200-person team about $8.50, where Linear would charge $200 and $2,000");
+  });
+
   it("status reports the database and process", async () => {
     const html = await (await h.app.request("/status")).text();
     expect(html).toContain("Everything is working");

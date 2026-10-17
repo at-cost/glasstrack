@@ -13,7 +13,7 @@ import { keys, useLabels, useStates, useTeams } from "../../lib/queries";
 import { toast, toastError } from "../../lib/toast";
 import { useWs } from "../shell/context";
 
-export const EMAIL_DOCS_URL = "https://github.com/transparent-ai-businesses/glasstrack/blob/main/docs/EMAIL-TO-ISSUE.md";
+export const EMAIL_DOCS_URL = "https://github.com/at-cost/glasstrack/blob/main/docs/EMAIL-TO-ISSUE.md";
 const KIND_LABEL: Record<IntakeKind, string> = { form: "Form", email: "Email inbox" };
 const MAX_LABELS = 10;
 

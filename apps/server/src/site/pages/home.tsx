@@ -1,7 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import { estimateEmails } from "@glasstrack/shared/pricing";
 import type { PublicFinances, PublicPricing } from "../../finances/public";
-import { COMPETITORS } from "../competitors";
+import { COMPETITORS, competitorMonthly } from "../competitors";
 import { estimate, TYPICAL, typicalMonthly } from "../estimate";
 import { int, usd, usdWhole } from "../fmt";
 import { ExampleBadge, ExampleNote, GITHUB_URL, Layout, type PageMeta, type SiteCtx } from "../layout";
@@ -129,7 +129,7 @@ export function HomePage(p: { pricing: PublicPricing; finances: PublicFinances; 
                     {c.vendor} {c.plan}
                   </span>
                   <span class="num" data-competitor={c.vendor}>
-                    ${int(c.perUserMonthUsd * people)}/mo
+                    ${int(competitorMonthly(c, people))}/mo
                   </span>
                 </li>
               ))}
@@ -323,6 +323,6 @@ export function calcData(p: PublicPricing) {
     sharedFixedMonthMicro: p.sharedFixedMonthMicro,
     activeWorkspaces: p.activeWorkspaces,
     typicalStorageGb: TYPICAL.storageGb,
-    competitors: COMPETITORS.map((c) => ({ vendor: c.vendor, perUserMonthUsd: c.perUserMonthUsd })),
+    competitors: COMPETITORS.map((c) => ({ vendor: c.vendor, perUserMonthUsd: c.perUserMonthUsd, freeUpToUsers: c.freeUpToUsers })),
   };
 }

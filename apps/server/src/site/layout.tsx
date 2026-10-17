@@ -5,7 +5,7 @@ import type { Child } from "hono/jsx";
 import { assetUrl, hasAsset } from "./assets";
 import { css } from "./styles";
 
-export const GITHUB_URL = "https://github.com/transparent-ai-businesses/glasstrack";
+export const GITHUB_URL = "https://github.com/at-cost/glasstrack";
 
 /**
  * Runs before first paint so a saved theme never flashes. Shares the app's key:

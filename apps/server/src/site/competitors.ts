@@ -8,6 +8,8 @@ export interface Competitor {
   plan: string;
   /** USD per user per month. */
   perUserMonthUsd: number;
+  /** Teams this size or smaller pay nothing (a free plan). */
+  freeUpToUsers?: number;
   basis: string;
   source: string;
   checkedOn: string;
@@ -38,4 +40,17 @@ export const COMPETITORS: Competitor[] = [
     source: "https://trello.com/pricing",
     checkedOn: "2026-10-16",
   },
+  {
+    vendor: "Jira",
+    plan: "Standard",
+    perUserMonthUsd: 8.48,
+    freeUpToUsers: 10,
+    basis: "per user per month, billed monthly; free for up to 10 users; yearly billing is priced in user bands and saves up to 17%",
+    source: "https://www.atlassian.com/software/jira/pricing",
+    checkedOn: "2026-10-17",
+  },
 ];
+
+/** What a team of this size pays per month on a competitor's plan. */
+export const competitorMonthly = (c: Pick<Competitor, "perUserMonthUsd" | "freeUpToUsers">, people: number): number =>
+  c.freeUpToUsers !== undefined && people <= c.freeUpToUsers ? 0 : c.perUserMonthUsd * people;

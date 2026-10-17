@@ -1,7 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import { AVG_DAYS_PER_MONTH, creditLastsDays, dailyCharge, estimateEmails, serverShareMicro } from "@glasstrack/shared/pricing";
 import type { PublicFinances, PublicPricing } from "../../finances/public";
-import { COMPETITORS } from "../competitors";
+import { COMPETITORS, competitorMonthly } from "../competitors";
 import { estimate, TYPICAL } from "../estimate";
 import { centsSplit, int, usd } from "../fmt";
 import { ExampleBadge, ExampleNote, GITHUB_URL, Layout, type PageMeta, type SiteCtx } from "../layout";
@@ -176,9 +176,12 @@ export function PricingPage(p: { pricing: PublicPricing; finances: PublicFinance
                           {i + 1}
                         </a>
                       </th>
-                      <td class="r">${c.perUserMonthUsd}</td>
+                      <td class="r">
+                        ${c.perUserMonthUsd}
+                        {c.freeUpToUsers ? <span class="muted small"> (free up to {c.freeUpToUsers})</span> : null}
+                      </td>
                       <td class="r" data-competitor={c.vendor}>
-                        ${int(c.perUserMonthUsd * people)}
+                        ${int(competitorMonthly(c, people))}
                       </td>
                     </tr>
                   ))}

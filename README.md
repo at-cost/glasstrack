@@ -39,7 +39,7 @@ An open-source ticket tracker for software teams: issues, boards, cycles, keyboa
 You need Docker with the compose plugin.
 
 ```sh
-git clone https://github.com/transparent-ai-businesses/glasstrack.git && cd glasstrack
+git clone https://github.com/at-cost/glasstrack.git && cd glasstrack
 sh scripts/init-env.sh          # creates .env with random secrets; set APP_URL and SMTP_URL
 docker compose up -d            # app on http://localhost:3000
 ```

@@ -161,7 +161,7 @@ export function Tokens() {
         </pre>
         <p className="muted small">
           The full list of endpoints is in docs/API.md in the{" "}
-          <a href="https://github.com/transparent-ai-businesses/glasstrack/blob/main/docs/API.md" target="_blank" rel="noreferrer">
+          <a href="https://github.com/at-cost/glasstrack/blob/main/docs/API.md" target="_blank" rel="noreferrer">
             Glasstrack repository
           </a>
           .

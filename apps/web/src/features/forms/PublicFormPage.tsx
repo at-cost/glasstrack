@@ -34,7 +34,7 @@ export function PublicFormPage() {
         )}
         <p className="form-footer">
           Powered by{" "}
-          <a href="https://github.com/transparent-ai-businesses/glasstrack" target="_blank" rel="noreferrer">
+          <a href="https://github.com/at-cost/glasstrack" target="_blank" rel="noreferrer">
             Glasstrack
           </a>
         </p>

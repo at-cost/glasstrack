@@ -19,7 +19,7 @@ interface CalcData {
   sharedFixedMonthMicro: number;
   activeWorkspaces: number;
   typicalStorageGb: number;
-  competitors: { vendor: string; perUserMonthUsd: number }[];
+  competitors: { vendor: string; perUserMonthUsd: number; freeUpToUsers?: number }[];
 }
 
 const el = document.getElementById("pricing-data");
@@ -46,7 +46,8 @@ function setText(scope: ParentNode, sel: string, text: string) {
 
 function competitors(scope: ParentNode, team: number) {
   for (const c of data!.competitors) {
-    setText(scope, `[data-competitor="${c.vendor}"]`, `$${int(c.perUserMonthUsd * team)}${scope instanceof HTMLElement && scope.hasAttribute("data-mini-calc") ? "/mo" : ""}`);
+    const monthly = c.freeUpToUsers !== undefined && team <= c.freeUpToUsers ? 0 : c.perUserMonthUsd * team;
+    setText(scope, `[data-competitor="${c.vendor}"]`, `$${int(monthly)}${scope instanceof HTMLElement && scope.hasAttribute("data-mini-calc") ? "/mo" : ""}`);
   }
 }
 

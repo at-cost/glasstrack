@@ -306,7 +306,7 @@ export const ContactPage = (p: { site: SiteCtx }) => (
     </p>
     <p>
       Bugs and feature requests are best filed as{" "}
-      <a href="https://github.com/transparent-ai-businesses/glasstrack/issues">GitHub issues</a>, where others can vote on them.
+      <a href="https://github.com/at-cost/glasstrack/issues">GitHub issues</a>, where others can vote on them.
     </p>
   </LegalShell>
 );

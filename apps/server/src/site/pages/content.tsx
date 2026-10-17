@@ -1,7 +1,7 @@
 /** @jsxImportSource hono/jsx */
 import type { PublicPricing } from "../../finances/public";
 import { COMPETITORS } from "../competitors";
-import { TYPICAL, typicalMonthly } from "../estimate";
+import { estimate, TYPICAL } from "../estimate";
 import { usdWhole } from "../fmt";
 import { GITHUB_URL, Layout, type PageMeta, type SiteCtx } from "../layout";
 
@@ -16,6 +16,9 @@ export function AboutPage(p: { pricing: PublicPricing; site: SiteCtx }) {
   const s = p.pricing.settings;
   const linear = COMPETITORS.find((c) => c.vendor === "Linear")!;
   const months = ["zero", "one", "two", "three", "four", "five", "six"][s.reserveTargetMonths] ?? String(s.reserveTargetMonths);
+  // Live estimates from the same module as billing, to the nearest 10 cents.
+  const about = (people: number) => `$${(Math.round(estimate(p.pricing, people, TYPICAL.storageGb).totalMicro / 100_000) / 10).toFixed(2)}`;
+  const linearFor = (people: number) => `$${(linear.perUserMonthUsd * people).toLocaleString("en-US")}`;
   return (
     <Layout meta={aboutMeta} site={p.site}>
       <div class="wrap">
@@ -25,34 +28,38 @@ export function AboutPage(p: { pricing: PublicPricing; site: SiteCtx }) {
         </header>
         <div class="prose" style="padding-bottom:40px">
           <p>
-            Writing software is getting cheaper every month. Recently, a small team released open-source rebuilds of much of Adobe's creative
-            suite. If software costs less to make, it should cost less to use.
+            Writing software is getting cheaper every month, and people are building free, open-source versions of the tools we all pay for.
+            This is my contribution.
           </p>
           <p>
-            Glasstrack is my attempt at that. It's an issue tracker for teams, in the spirit of Linear, Jira and Trello. It's open source under
-            the MIT licence, so it's free: download it, run it, change it.
+            Glasstrack is an issue tracker for teams, in the spirit of Linear and Jira. It's open source under the MIT licence, and I've tried to
+            build in the features and feedback I've seen and used in other tools. Every feature is free, and nothing is locked behind a paid
+            plan: download it, run it, change it.
           </p>
           <p>
-            If you'd rather not run it yourself, I'll host it for you. Hosting costs real money, so hosted Glasstrack is pay-as-you-go, at cost.
-            Each workspace pays a share of the servers, capped at {usdWhole(s.serverShareCapUsd * 1_000_000)} a month, plus its own storage and
-            email, plus {Math.round(s.feeMarkup * 100)}% to cover payment fees and a small reserve. Most teams pay about{" "}
-            {usdWhole(typicalMonthly(p.pricing).totalMicro)} a month; the same {TYPICAL.people}-person team pays $
-            {linear.perUserMonthUsd * TYPICAL.people} on Linear. Every new workspace starts with ${s.signupCreditUsd} of credit, and the{" "}
-            <a href="/pricing">calculator</a> shows exactly where every cent goes.
+            If you'd rather not run it yourself, I'll host it for you. Instead of charging per seat, I charge what it costs to run: a share of
+            the servers (at most {usdWhole(s.serverShareCapUsd * 1_000_000)} a month), plus your workspace's own storage and email, plus{" "}
+            {Math.round(s.feeMarkup * 100)}% to cover payment fees and a small reserve. A {TYPICAL.people}-person team pays about{" "}
+            {about(TYPICAL.people)} a month and a 200-person team about {about(200)}, where Linear would charge {linearFor(TYPICAL.people)} and{" "}
+            {linearFor(200)}. Every new workspace starts with ${s.signupCreditUsd} of credit, and the <a href="/pricing">calculator</a> shows
+            where every cent goes.
           </p>
           <p>
-            I'm self-funding Glasstrack to start, and the <a href="/finances">finances page</a> shows exactly how much of the server bill I'm
-            covering. Most of what it costs to run software is fixed: the servers cost much the same whether 10 teams use them or 500. So every
-            new team lowers the cost for everyone, and once there's {months} months of running costs in reserve, I lower the cap as well. The
-            price only goes down, and I'll keep finding ways to run it more cheaply and pass every saving on.
+            I'm self-funding Glasstrack to start, and I publish every cost and all the <a href="/finances">finances</a>, including the
+            $200-a-month AI subscription and how much of the bill I'm covering myself. Most of the cost is fixed: the servers cost much the same
+            whether 10 teams use them or 500. So the server share falls as more teams join, and once there are {months} months of running costs
+            in reserve, the {usdWhole(s.serverShareCapUsd * 1_000_000)} cap comes down too. The price only goes down.
           </p>
           <p>
             How can it be this cheap? AI now does much of the work that used to need a whole team. It already helps me build and fix Glasstrack,
-            and I'm setting it up to triage bug reports and ship fixes around the clock. Instead of turning those savings into profit, Glasstrack
-            passes them on to you. I'm still here: I set the direction, I'm accountable for what ships, and you can always{" "}
-            <a href="/contact">reach me</a>.
+            and I'm setting it up to check GitHub issues, prioritise them and propose fixes. Every change is tested, and anything risky comes to
+            me. If the server has a problem, I'm alerted within minutes. Instead of turning those savings into profit, Glasstrack passes them on
+            to you. I'm still here: I set the direction, I'm accountable for what ships, and you can always <a href="/contact">reach me</a>.
           </p>
-          <p>Issue tracking is the first tool. If this works, I'd like to do the same for others.</p>
+          <p>
+            My aim is to make software as close to free as possible. Issue tracking is the first tool. If this works, I'd like to do the same for
+            others.
+          </p>
         </div>
       </div>
     </Layout>
