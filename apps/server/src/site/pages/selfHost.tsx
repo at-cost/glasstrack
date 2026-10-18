@@ -138,6 +138,23 @@ export function SelfHostPage(p: { site: SiteCtx }) {
           </div>
         </section>
 
+        <section class="section prose" aria-labelledby="move-h">
+          <h2 id="move-h">Moving from glasstrack.dev to your own server</h2>
+          <p>
+            Export your workspace (Settings, then Export) and import it into a new workspace on your server. Issue numbers like ENG-12,
+            comments, history, attachments, custom fields, time entries and templates all come across, and people are matched by email. A
+            test exports and re-imports a workspace on every change, so leaving stays easy.
+          </p>
+          <Code
+            label="import a workspace export"
+            code={"docker compose cp ./acme-export.tar.gz app:/tmp/acme-export.tar.gz\ndocker compose exec app node dist/import-workspace.js /tmp/acme-export.tar.gz --slug acme --owner you@example.com"}
+          />
+          <p class="small muted" style="margin-top:12px">
+            Add <code>--dry-run</code> first to see what would be imported. Recurring issues and automations arrive switched off. Billing,
+            API tokens, webhooks, integrations and single sign-on stay behind; set those up again on your server.
+          </p>
+        </section>
+
         <section class="section prose" aria-labelledby="docs-h">
           <h2 id="docs-h">Full documentation</h2>
           <p>

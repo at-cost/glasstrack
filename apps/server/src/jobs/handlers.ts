@@ -15,6 +15,9 @@ import type { JobName, JobPayloads } from "./types";
 
 const EXPORT_TTL_DAYS = 7;
 
+/** Short enough that the id always survives the tar name limit; import finds files by id. */
+const attachmentPath = (a: { id: string; filename: string }) => `attachments/${a.id}-${a.filename.slice(-40)}`;
+
 /** Builds workspace.json + CSVs + attachments into a .tar.gz, with RLS enforced. */
 export async function exportWorkspace(deps: Deps, { exportId, workspaceId }: JobPayloads["export.workspace"]) {
   const { app, system } = deps.dbs;
@@ -28,7 +31,9 @@ export async function exportWorkspace(deps: Deps, { exportId, workspaceId }: Job
   const dir = await mkdtemp(path.join(tmpdir(), "glasstrack-export-"));
   const file = path.join(dir, "export.tar.gz");
   try {
-    const data = await asWorkspace(app, workspaceId, async (trx) => {
+    // One consistent snapshot: rows added while the export runs never appear half-way (a comment without its issue).
+    const data = await app.transaction().setIsolationLevel("repeatable read").execute(async (trx) => {
+      await sql`SELECT set_config('app.workspace_id', ${workspaceId}, true)`.execute(trx);
       const workspace = await system.selectFrom("workspaces").select(["id", "slug", "name", "createdAt"]).where("id", "=", workspaceId).executeTakeFirstOrThrow();
       return {
         format: "glasstrack-export",
@@ -37,7 +42,7 @@ export async function exportWorkspace(deps: Deps, { exportId, workspaceId }: Job
         workspace,
         members: await (trx.selectFrom("workspaceMembers as m").innerJoin("users as u", "u.id", "m.userId")
           .select(["u.id", "u.name", "u.email", "m.role", "m.joinedAt"]).execute()),
-        teams: await (trx.selectFrom("teams").select(["id", "key", "name", "createdAt", "archivedAt"]).execute()),
+        teams: await (trx.selectFrom("teams").select(["id", "key", "name", "private", "issueCounter", "createdAt", "archivedAt"]).execute()),
         teamKeyAliases: await (trx.selectFrom("teamKeyAliases").select(["key", "teamId"]).execute()),
         teamMembers: await (trx.selectFrom("teamMembers").select(["teamId", "userId"]).execute()),
         states: await (trx.selectFrom("workflowStates").select(["id", "teamId", "name", "category", "color", "position"]).execute()),
@@ -45,7 +50,7 @@ export async function exportWorkspace(deps: Deps, { exportId, workspaceId }: Job
         cycles: await (trx.selectFrom("cycles").select(["id", "teamId", "number", "name", "startsOn", "endsOn", "completedAt"]).execute()),
         issues: await (trx.selectFrom("issues as i").innerJoin("teams as t", "t.id", "i.teamId")
           .select(["i.id", "i.teamId", sql<string>`t.key || '-' || i.number`.as("identifier"), "i.title", "i.descriptionMd",
-            "i.statusId", "i.priority", "i.creatorId", "i.parentId", "i.cycleId", "i.dueDate", "i.estimate",
+            "i.statusId", "i.priority", "i.creatorId", "i.parentId", "i.cycleId", "i.startDate", "i.dueDate", "i.estimate",
             "i.sortKey", "i.createdAt", "i.updatedAt", "i.startedAt", "i.completedAt", "i.canceledAt", "i.archivedAt"])
           .select((eb) => eb.selectFrom("issueLabels as il").select(sql<string[]>`coalesce(array_agg(il.label_id), '{}')`.as("l"))
             .whereRef("il.issueId", "=", "i.id").as("labelIds"))
@@ -63,11 +68,32 @@ export async function exportWorkspace(deps: Deps, { exportId, workspaceId }: Job
         timeEntries: await trx.selectFrom("timeEntries").select(["id", "issueId", "userId", "spentOn", "minutes", "note", "createdAt"]).execute(),
         templates: await trx.selectFrom("issueTemplates").select(["id", "teamId", "name", "title", "descriptionMd", "statusId", "priority", "labelIds", "assigneeIds", "estimate", "fieldValues"]).execute(),
         recurring: await trx.selectFrom("recurringIssues").select(["id", "templateId", "frequency", "interval", "weekdays", "monthDay", "hour", "timezone", "startsOn", "nextRunAt", "active"]).execute(),
+        automationRules: await trx.selectFrom("automationRules").select(["id", "teamId", "name", "enabled", "trigger", "triggerConfig", "conditions", "actions", "createdAt"]).execute(),
+        issueLinks: await trx.selectFrom("issueLinks").select(["id", "issueId", "provider", "url", "title", "state", "createdAt"]).execute(),
         auditLog: await trx.selectFrom("auditLog").select(["id", "actorLabel", "action", "targetType", "targetId", "data", "createdAt"]).orderBy("id").execute(),
         attachments: await (trx.selectFrom("attachments").select(["id", "issueId", "filename", "contentType", "sizeBytes", "storageKey", "createdAt"])
           .where("deletedAt", "is", null).where("uploadedAt", "is not", null).execute()),
       };
     });
+
+    // Everyone the rows refer to, including people who have left, so imports keep who wrote and did what.
+    const referenced = new Set<string>(data.members.map((m) => m.id));
+    const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const userFields = new Set(data.customFields.filter((f) => f.type === "user").map((f) => f.id));
+    for (const i of data.issues) {
+      for (const u of [i.creatorId, ...(i.assigneeIds ?? [])]) if (u) referenced.add(u);
+      for (const [fid, v] of Object.entries(i.fields ?? {})) {
+        if (userFields.has(fid)) for (const u of [v].flat()) if (typeof u === "string" && uuidLike.test(u)) referenced.add(u);
+      }
+    }
+    for (const t of data.templates) for (const u of t.assigneeIds ?? []) referenced.add(u);
+    for (const r of [...data.comments.map((x) => x.authorId), ...data.activity.map((x) => x.actorId), ...data.timeEntries.map((x) => x.userId), ...data.savedViews.map((x) => x.ownerId)]) {
+      if (r) referenced.add(r);
+    }
+    const people = referenced.size
+      ? await system.selectFrom("users").select(["id", "name", "email"]).where("id", "in", [...referenced]).execute()
+      : [];
+    Object.assign(data, { people });
 
     const gzip = createGzip({ level: 6 });
     const done = new Promise<void>((resolve, reject) => {
@@ -80,7 +106,7 @@ export async function exportWorkspace(deps: Deps, { exportId, workspaceId }: Job
     const root = `${data.workspace.slug}-export`;
     await tar.addBuffer(
       `${root}/workspace.json`,
-      JSON.stringify({ ...data, attachments: data.attachments.map(({ storageKey: _s, ...a }) => ({ ...a, path: `attachments/${a.id}-${a.filename}` })) }, null, 2),
+      JSON.stringify({ ...data, attachments: data.attachments.map(({ storageKey: _s, ...a }) => ({ ...a, path: attachmentPath(a) })) }, null, 2),
     );
     const userName = new Map(data.members.map((m) => [m.id, m.name]));
     const stateName = new Map(data.states.map((s) => [s.id, s.name]));
@@ -117,7 +143,7 @@ export async function exportWorkspace(deps: Deps, { exportId, workspaceId }: Job
     for (const a of data.attachments) {
       const size = await deps.storage.size(a.storageKey);
       if (size === null) continue;
-      await tar.addStream(`${root}/attachments/${a.id}-${a.filename}`, size, await deps.storage.get(a.storageKey));
+      await tar.addStream(`${root}/${attachmentPath(a)}`, size, await deps.storage.get(a.storageKey));
     }
     await tar.finish();
     await done;

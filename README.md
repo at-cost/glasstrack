@@ -68,6 +68,22 @@ Every option is documented in [`.env.example`](.env.example). Moving from AWS to
 
   One-off backup: `docker compose exec app node dist/backup.js`.
 
+## Moving a workspace to your own server
+
+Export the workspace (Settings → Export, as an admin), then import the `.tar.gz` into a new workspace on your server. Issue identifiers (`ENG-12` stays `ENG-12`), comments, history, attachments, custom fields, time entries, templates, saved views and the audit log all come across. People are matched by email; anyone without an account here gets one and signs in with the same email.
+
+```sh
+docker compose cp ./acme-export.tar.gz app:/tmp/acme-export.tar.gz
+docker compose exec app node dist/import-workspace.js /tmp/acme-export.tar.gz --slug acme --owner you@example.com --dry-run
+docker compose exec app node dist/import-workspace.js /tmp/acme-export.tar.gz --slug acme --owner you@example.com
+```
+
+`--dry-run` runs the whole import and rolls it back, so it shows what would be imported (including which existing accounts on your server get access, and their roles) without writing anything. `--members-as viewer` gives every imported member that role instead (the `--owner` stays admin). The import always creates a new workspace and never changes an existing one. Recurring issues and automations arrive switched off so nothing fires unexpectedly; turn them back on in Settings. Comments and time logged by people who have left keep their name, without giving them access.
+
+What doesn't move: billing and credit (they stay with the old host), API tokens, webhooks, single sign-on, GitHub/GitLab/Gitea integrations, request forms and email inboxes (they have secrets or addresses tied to the old server; set them up again), notification settings and who follows which issue (the importer subscribes everyone involved in an issue).
+
+A test exports a workspace and imports it into a clean one on every change, so this keeps working.
+
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, and [ARCHITECTURE.md](ARCHITECTURE.md) for the stack, data model, tenant isolation and the billing design.

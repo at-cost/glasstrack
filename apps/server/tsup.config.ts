@@ -8,6 +8,7 @@ export default defineConfig({
     seed: "src/cli/seed.ts",
     backup: "src/cli/backup.ts",
     "restore-verify": "src/cli/restoreVerify.ts",
+    "import-workspace": "src/cli/importWorkspace.ts",
   },
   format: ["esm"],
   platform: "node",
