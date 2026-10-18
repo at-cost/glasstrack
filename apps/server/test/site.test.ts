@@ -100,6 +100,7 @@ describe("public site", () => {
     expect(competitorMonthly(jira, 20)).toBeCloseTo(169.6, 6);
     const pricing = await (await h.app.request("/pricing")).text();
     expect(pricing).toContain("Jira Standard");
+    expect(pricing).toContain(`(free up to ${jira.freeUpToUsers} users)`);
     expect(pricing).toMatch(/data-competitor="Jira">\s*\$170/);
     const about = await (await h.app.request("/about")).text();
     // Example pricing ($60 of servers, 1 workspace): 20 people about $6.40, 200 people about $8.50.

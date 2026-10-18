@@ -178,7 +178,7 @@ export function PricingPage(p: { pricing: PublicPricing; finances: PublicFinance
                       </th>
                       <td class="r">
                         ${c.perUserMonthUsd}
-                        {c.freeUpToUsers ? <span class="muted small"> (free up to {c.freeUpToUsers})</span> : null}
+                        {c.freeUpToUsers ? <span class="muted small">{` (free up to ${c.freeUpToUsers} users)`}</span> : null}
                       </td>
                       <td class="r" data-competitor={c.vendor}>
                         ${int(competitorMonthly(c, people))}
