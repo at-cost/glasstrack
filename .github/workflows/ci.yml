@@ -85,6 +85,9 @@ jobs:
           sh scripts/init-env.sh
           docker compose up -d --build --wait --wait-timeout 180
           curl -fsS http://localhost:3000/ready
-          curl -fsS http://localhost:3000/ | grep -q '<div id="root">'
+          # / is the server-rendered public site; the app (SPA) lives at /app.
+          curl -fsS http://localhost:3000/ | grep -q 'Software should be pay-as-you-go'
+          curl -fsS http://localhost:3000/pricing | grep -q 'What would my team pay'
+          curl -fsS http://localhost:3000/app | grep -q '<div id="root">'
           docker compose logs app | tail -20
           docker compose down -v
