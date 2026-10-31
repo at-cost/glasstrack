@@ -6,6 +6,9 @@ import { isBot, PageViewCounter, pageViews, referrerHost } from "../src/site/ana
 import { centsSplit } from "../src/site/fmt";
 import { PUBLIC_PAGES } from "../src/site";
 import { THEME_BOOT_HASH } from "../src/site/layout";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client, createHarness, type Harness } from "./harness";
 
 let h: Harness;
@@ -84,6 +87,18 @@ describe("public site", () => {
     expect(og.status).toBe(200);
     expect(og.headers.get("content-type")).toBe("image/png");
     expect((await h.app.request("/og/nope.png")).status).toBe(404);
+  });
+
+  it("serves security.txt with a contact and an expiry under a year away", async () => {
+    const res = await h.app.request("/.well-known/security.txt");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/plain");
+    const body = await res.text();
+    expect(body).toContain("Contact: mailto:security@glasstrack.dev");
+    expect(body).toContain("Canonical: http://localhost:3999/.well-known/security.txt");
+    const expires = Date.parse(/^Expires: (.+)$/m.exec(body)?.[1] ?? "");
+    expect(expires).toBeGreaterThan(Date.now());
+    expect(expires).toBeLessThan(Date.now() + 365 * 86_400_000);
   });
 
   it("allows only its own inline theme script by hash", async () => {
@@ -186,5 +201,36 @@ describe("cents split", () => {
       const parts = centsSplit([b.serverShareMicro, b.storageMicro, b.emailMicro, b.feesAndReserveMicro], b.totalMicro);
       expect(parts.reduce((a, x) => a + x, 0), `${team}`).toBe(Math.round(b.totalMicro / 10_000) * 10_000);
     }
+  });
+});
+
+describe("app fallback", () => {
+  let app: Harness;
+  let dist: string;
+  beforeAll(async () => {
+    dist = mkdtempSync(join(tmpdir(), "glasstrack-dist-"));
+    writeFileSync(join(dist, "index.html"), "<!doctype html><title>Glasstrack</title>");
+    writeFileSync(join(dist, "favicon.svg"), "<svg/>");
+    app = await createHarness({ WEB_DIST_DIR: dist });
+  });
+  afterAll(async () => {
+    await app?.close();
+    rmSync(dist, { recursive: true, force: true });
+  });
+
+  it("serves the app shell for client routes but keeps it out of search results", async () => {
+    for (const path of ["/app", "/acme/issues", "/nope-xyz"]) {
+      const res = await app.app.request(path);
+      expect(res.status, path).toBe(200);
+      expect(await res.text(), path).toContain("<title>Glasstrack</title>");
+      expect(res.headers.get("x-robots-tag"), path).toBe("noindex");
+    }
+  });
+
+  it("leaves public pages and static files indexable", async () => {
+    expect((await app.app.request("/pricing")).headers.get("x-robots-tag")).toBeNull();
+    const icon = await app.app.request("/favicon.svg");
+    expect(icon.status).toBe(200);
+    expect(icon.headers.get("x-robots-tag")).toBeNull();
   });
 });

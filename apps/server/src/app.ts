@@ -168,7 +168,12 @@ export function createApp(deps: Deps) {
       if (c.res.ok) c.header("Cache-Control", "public, max-age=31536000, immutable");
     });
     app.use("*", serveStatic({ root }));
-    // SPA fallback: client-side routes get index.html.
+    // SPA fallback: client-side routes get index.html. The server can't tell a workspace slug from a typo,
+    // so these pages always answer 200; noindex keeps search engines from listing them as copies of one page.
+    app.get("*", async (c, next) => {
+      await next();
+      c.header("X-Robots-Tag", "noindex");
+    });
     app.get("*", serveStatic({ root, path: "index.html" }));
   }
 

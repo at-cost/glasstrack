@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { MICRO } from "@glasstrack/shared";
 import { CreditCard } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";

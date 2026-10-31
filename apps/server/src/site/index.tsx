@@ -8,6 +8,7 @@ import { financesCsv, getPublicFinances, getPublicPricing } from "../finances/pu
 import { isBot, pageViews, referrerHost } from "./analytics";
 import { assets } from "./assets";
 import { renderPage, type SiteCtx } from "./layout";
+import { OPERATOR } from "./operator";
 import { AboutPage, HowPage } from "./pages/content";
 import { FinancesPage } from "./pages/finances";
 import { HomePage } from "./pages/home";
@@ -26,6 +27,7 @@ export function isSitePath(path: string): boolean {
     path === "/finances.csv" ||
     path === "/sitemap.xml" ||
     path === "/robots.txt" ||
+    path === "/.well-known/security.txt" ||
     path.startsWith("/og/") ||
     path.startsWith("/site/")
   );
@@ -111,6 +113,14 @@ export const siteRoutes = new Hono<AppEnv>()
   .get("/robots.txt", (c) => {
     c.header("Cache-Control", "public, max-age=3600");
     return c.text(`User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /app\nDisallow: /login\n\nSitemap: ${baseUrl(c)}/sitemap.xml\n`);
+  })
+  .get("/.well-known/security.txt", (c) => {
+    // RFC 9116. Expires must be under a year away, so it rolls forward instead of going stale.
+    const expires = new Date(Date.now() + 180 * 86_400_000).toISOString().slice(0, 10);
+    c.header("Cache-Control", "public, max-age=86400");
+    return c.text(
+      `Contact: mailto:${OPERATOR.securityEmail}\nExpires: ${expires}T00:00:00.000Z\nPreferred-Languages: en\nCanonical: ${baseUrl(c)}/.well-known/security.txt\nPolicy: https://github.com/at-cost/glasstrack/blob/main/SECURITY.md\n`,
+    );
   })
   .get("/og/:file", (c) => {
     const a = assets().get(`og/${c.req.param("file")}`);

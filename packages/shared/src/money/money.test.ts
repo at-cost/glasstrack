@@ -4,7 +4,6 @@ import {
   distribute,
   formatUsd,
   GIB,
-  MICRO,
   nextBillingState,
   splitRevenue,
   usdToMicro,

@@ -8,7 +8,6 @@ import { Empty, FullPageLoading, Spinner } from "../../components/Feedback";
 import { type AdminOverview, api, type CostCategory, type CostEntry, type CostInput, errorMessage, type SavingEntry } from "../../lib/api";
 import { addDays, todayISO } from "../../lib/format";
 import { formatUsd, microToInput, shortDate } from "../../lib/money";
-import { paths } from "../../lib/paths";
 import { keys, useMe, useOperator } from "../../lib/queries";
 import { toast, toastError } from "../../lib/toast";
 import { PricingSettingsCard } from "./PricingSettingsCard";
